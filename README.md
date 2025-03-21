@@ -14,7 +14,7 @@ NewsDigest is an intelligent RSS feed aggregator that collects news from various
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/NewsDigest.git
+git clone https://github.com/iasonyc/NewsDigest.git
 cd NewsDigest
 
 # Install dependencies
@@ -78,6 +78,3 @@ The application can be configured through the settings window or by directly edi
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
