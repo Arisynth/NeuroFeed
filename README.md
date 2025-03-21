@@ -1,25 +1,83 @@
-rss_ai_mailer/
-├── main.py                 # 启动入口，运行 GUI
-├── gui/                    # GUI 相关代码
-│   ├── __init__.py
-│   ├── main_window.py      # 主窗口
-│   ├── settings_window.py  # 配置窗口
-│   ├── tray_icon.py        # 托盘管理
-├── core/                   # 核心业务逻辑
-│   ├── __init__.py
-│   ├── rss_parser.py       # 解析 RSS 订阅源
-│   ├── email_sender.py     # 发送邮件
-│   ├── scheduler.py        # 任务调度
-│   ├── config_manager.py   # 读取和存储用户配置
-├── ai_processor/           # AI 处理逻辑（独立包）
-│   ├── __init__.py
-│   ├── ranker.py           # 新闻排序
-│   ├── summarizer.py       # 生成摘要
-│   ├── ai_utils.py         # AI 处理工具（连接 GPT API / Ollama）
-├── data/                   # 数据存储
-│   ├── config.json         # 配置文件
-│   ├── rss_feeds.db        # SQLite 数据库（存储 RSS 订阅信息）
-├── resources/              # 资源文件
-│   ├── icons/              # 托盘图标
-│   ├── styles.qss          # 界面样式
-└── requirements.txt        # 依赖列表
+# NewsDigest
+
+NewsDigest is an intelligent RSS feed aggregator that collects news from various sources, processes them with AI to generate summaries, and sends personalized email digests to users.
+
+## Features
+
+- Collect news from multiple RSS feeds
+- AI-powered article summarization and ranking
+- Customizable email delivery scheduling
+- User-friendly GUI with system tray integration
+- Configurable preferences
+
+## Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/NewsDigest.git
+cd NewsDigest
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+## Usage
+
+```bash
+# Run the application
+python main.py
+```
+
+## Project Structure
+
+```
+NewsDigest/
+├── main.py                 # Application entry point
+├── gui/                    # GUI components
+│   ├── __init__.py         # Package initialization
+│   ├── main_window.py      # Main application window
+│   ├── setting_window.py   # Settings configuration window
+│   ├── tray_icon.py        # System tray integration
+├── core/                   # Core business logic
+│   ├── __init__.py         # Package initialization
+│   ├── rss_parser.py       # RSS feed parser
+│   ├── email_sender.py     # Email delivery system
+│   ├── scheduler.py        # Task scheduling
+│   ├── config_manager.py   # Configuration management
+├── ai_processor/           # AI processing modules
+│   ├── __init__.py         # Package initialization
+│   ├── filter.py           # Content filtering
+│   ├── summarizer.py       # Article summarization
+│   ├── ai_utils.py         # AI utilities (GPT/Ollama API)
+├── data/                   # Data storage
+│   ├── config.json         # User configuration
+│   ├── rss_feeds.db        # SQLite database for RSS feeds
+├── resources/              # Application resources
+│   ├── icons/              # System tray and UI icons
+│   ├── styles.qss          # Qt stylesheet for UI
+└── requirements.txt        # Project dependencies
+```
+
+## Configuration
+
+The application can be configured through the settings window or by directly editing the `data/config.json` file.
+
+## Development
+
+### Requirements
+
+- Python 3.8 or higher
+- PyQt6 for the GUI
+- Dependencies listed in requirements.txt
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
