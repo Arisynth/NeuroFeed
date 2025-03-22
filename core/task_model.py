@@ -80,3 +80,15 @@ class Task:
         if feed_url not in self.feed_config:
             self.feed_config[feed_url] = {}
         self.feed_config[feed_url]["items_count"] = count
+    
+    def get_feed_labels(self, feed_url):
+        """Get interest labels for a feed, default is empty list"""
+        if feed_url in self.feed_config and "labels" in self.feed_config[feed_url]:
+            return self.feed_config[feed_url]["labels"]
+        return []
+    
+    def set_feed_labels(self, feed_url, labels):
+        """Set interest labels for a feed"""
+        if feed_url not in self.feed_config:
+            self.feed_config[feed_url] = {}
+        self.feed_config[feed_url]["labels"] = labels

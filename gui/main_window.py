@@ -2,47 +2,83 @@ from PyQt6.QtWidgets import (QMainWindow, QLabel, QVBoxLayout, QHBoxLayout,
                             QListWidget, QPushButton, QWidget, QInputDialog, 
                             QMessageBox, QDialog, QComboBox, QFormLayout,
                             QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView,
-                            QSpinBox, QDialogButtonBox)
+                            QSpinBox, QDialogButtonBox, QLineEdit)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from core.config_manager import load_config, save_config, get_tasks, save_task, delete_task
 from core.task_model import Task
 from datetime import datetime
+from gui.tag_editor import TagEditor
 
 class FeedConfigDialog(QDialog):
     """Dialog to configure RSS feed settings"""
-    def __init__(self, parent=None, feed_url="", items_count=10):
+    def __init__(self, parent=None, feed_url="", items_count=10, labels=None):
         super().__init__(parent)
         self.setWindowTitle("RSS Feed Configuration")
-        self.resize(400, 150)
+        self.resize(550, 280)  # 稍微减小窗口宽度
         
         layout = QVBoxLayout(self)
         
         form_layout = QFormLayout()
+        # 设置标签左对齐，但字段不对齐，直接跟在标签后面
+        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         
         self.url_input = QLineEdit(feed_url)
+        self.url_input.setMinimumWidth(400)  # 确保URL输入框足够宽
+        
         self.count_input = QSpinBox()
         self.count_input.setRange(1, 100)
         self.count_input.setValue(items_count)
+        self.count_input.setFixedWidth(80)
         self.count_input.setSuffix(" items")
         
         form_layout.addRow("RSS Feed URL:", self.url_input)
         form_layout.addRow("Number of news items to fetch:", self.count_input)
         
+        # 标签区域标题，移除加粗
+        labels_label = QLabel("Interest Tags:")
+        
+        # 使用2行高的标签编辑器
+        self.tag_editor = TagEditor(rows=2)
+        if labels:
+            self.tag_editor.set_tags(labels)
+        
         layout.addLayout(form_layout)
+        layout.addWidget(labels_label)
+        layout.addWidget(self.tag_editor)
         
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        ok_button = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if (ok_button):
+            ok_button.setAutoDefault(False)
+            ok_button.setDefault(False)
+        
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         
         layout.addWidget(buttons)
+    
+    def keyPressEvent(self, event):
+        """处理按键事件，阻止回车键关闭对话框"""
+        if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
+            # 如果焦点在输入框上，添加新标签而不关闭对话框
+            if self.tag_editor.tag_input.hasFocus():
+                self.tag_editor.add_current_tag()
+                event.accept()
+                return
+        # 其他情况，调用父类处理
+        super().keyPressEvent(event)
     
     def get_feed_url(self):
         return self.url_input.text()
     
     def get_items_count(self):
         return self.count_input.value()
+    
+    def get_labels(self):
+        return self.tag_editor.get_tags()
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -53,7 +89,7 @@ class MainWindow(QMainWindow):
         # Load tasks from config
         self.tasks = get_tasks()
         self.current_task = None
-        if self.tasks:
+        if (self.tasks):
             self.current_task = self.tasks[0]
         else:
             # Create default task if none exists
@@ -197,6 +233,9 @@ class MainWindow(QMainWindow):
         
         main_layout.addLayout(buttons_layout)
         
+        # 添加双击信号连接
+        self.feed_table.cellDoubleClicked.connect(self.on_feed_double_clicked)
+        
         # Update UI with current task
         self.update_ui_from_task()
     
@@ -240,29 +279,46 @@ class MainWindow(QMainWindow):
             return
             
         self.feed_table.setRowCount(0)  # Clear existing rows
-        self.feed_table.setColumnCount(4)  # URL, Items Count, Status, Last Fetch Time
-        self.feed_table.setHorizontalHeaderLabels(["Feed URL", "Items", "Status", "Last Fetch Time"])
+        self.feed_table.setColumnCount(5)  # URL, Items Count, Labels, Status, Last Fetch Time
+        self.feed_table.setHorizontalHeaderLabels(["Feed URL", "Items", "Labels", "Status", "Last Fetch Time"])
         self.feed_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.feed_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.feed_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self.feed_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.feed_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         
         for row, feed_url in enumerate(self.current_task.rss_feeds):
             self.feed_table.insertRow(row)
             
             # Feed URL
             url_item = QTableWidgetItem(feed_url)
+            url_item.setFlags(url_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # 设置为不可编辑
             self.feed_table.setItem(row, 0, url_item)
             
             # Items count
             items_count = self.current_task.get_feed_items_count(feed_url)
             count_item = QTableWidgetItem(str(items_count))
+            count_item.setFlags(count_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # 设置为不可编辑
             self.feed_table.setItem(row, 1, count_item)
+            
+            # Labels - 限制显示数量
+            labels = self.current_task.get_feed_labels(feed_url)
+            labels_text = ""
+            if labels:
+                if len(labels) <= 3:
+                    labels_text = ", ".join(labels)
+                else:
+                    labels_text = ", ".join(labels[:3]) + "..."
+                    
+            labels_item = QTableWidgetItem(labels_text)
+            labels_item.setFlags(labels_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # 设置为不可编辑
+            self.feed_table.setItem(row, 2, labels_item)
             
             # Status
             status_info = self.current_task.feeds_status.get(feed_url, {})
             status = status_info.get("status", "unknown")
             status_item = QTableWidgetItem(status)
+            status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # 设置为不可编辑
             
             # Set color based on status
             if status == "success":
@@ -270,7 +326,7 @@ class MainWindow(QMainWindow):
             elif status == "fail":
                 status_item.setForeground(QColor("red"))
                 
-            self.feed_table.setItem(row, 2, status_item)
+            self.feed_table.setItem(row, 3, status_item)
             
             # Last fetch time
             last_fetch = status_info.get("last_fetch", "Never")
@@ -282,7 +338,12 @@ class MainWindow(QMainWindow):
                     last_fetch = "Invalid format"
                     
             time_item = QTableWidgetItem(last_fetch)
-            self.feed_table.setItem(row, 3, time_item)
+            time_item.setFlags(time_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # 设置为不可编辑
+            self.feed_table.setItem(row, 4, time_item)
+    
+    def on_feed_double_clicked(self, row, column):
+        """处理双击Feed表格事件，打开编辑对话框"""
+        self.edit_feed()  # 复用现有的编辑功能
     
     def update_recipient_table(self):
         """Update the recipients table with current task's recipients and their status"""
@@ -328,14 +389,20 @@ class MainWindow(QMainWindow):
         if not self.current_task:
             return
             
-        dialog = FeedConfigDialog(self)
+        # 获取用户默认标签
+        config = load_config()
+        default_labels = config.get("global_settings", {}).get("user_interests", [])
+        
+        dialog = FeedConfigDialog(self, labels=default_labels)
         if dialog.exec():
             feed_url = dialog.get_feed_url()
             items_count = dialog.get_items_count()
+            labels = dialog.get_labels()
             
             if feed_url:
                 self.current_task.rss_feeds.append(feed_url)
                 self.current_task.set_feed_items_count(feed_url, items_count)
+                self.current_task.set_feed_labels(feed_url, labels)
                 save_task(self.current_task)
                 self.update_feed_table()
     
@@ -348,11 +415,13 @@ class MainWindow(QMainWindow):
         if current_row >= 0:
             feed_url = self.current_task.rss_feeds[current_row]
             items_count = self.current_task.get_feed_items_count(feed_url)
+            labels = self.current_task.get_feed_labels(feed_url)
             
-            dialog = FeedConfigDialog(self, feed_url, items_count)
+            dialog = FeedConfigDialog(self, feed_url, items_count, labels)
             if dialog.exec():
                 new_url = dialog.get_feed_url()
                 new_count = dialog.get_items_count()
+                new_labels = dialog.get_labels()
                 
                 # Keep feed status if URL doesn't change
                 if new_url != feed_url:
@@ -363,8 +432,9 @@ class MainWindow(QMainWindow):
                         config = self.current_task.feed_config.pop(feed_url)
                         self.current_task.feed_config[new_url] = config
                 
-                # Update items count
+                # Update items count and labels
                 self.current_task.set_feed_items_count(new_url, new_count)
+                self.current_task.set_feed_labels(new_url, new_labels)
                 save_task(self.current_task)
                 self.update_feed_table()
     

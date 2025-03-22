@@ -5,6 +5,7 @@ from PyQt6.QtCore import Qt
 from core.config_manager import load_config, save_config
 import requests
 import json
+from gui.tag_editor import TagEditor  # 导入标签编辑器
 
 class SettingsWindow(QDialog):
     def __init__(self, parent=None):
@@ -27,6 +28,9 @@ class SettingsWindow(QDialog):
         
         # AI settings tab
         self.create_ai_tab()
+        
+        # 添加用户兴趣标签设置页
+        self.create_interests_tab()
         
         # General settings tab
         self.create_general_tab()
@@ -259,6 +263,30 @@ class SettingsWindow(QDialog):
             self.ollama_group.setVisible(False)
             self.openai_group.setVisible(True)
 
+    def create_interests_tab(self):
+        """Create user interest tags settings tab"""
+        interests_tab = QWidget()
+        layout = QVBoxLayout(interests_tab)
+        
+        # Description label - 移除加粗，左对齐
+        description = QLabel("Set your interest tags that will be automatically applied when adding new RSS feeds:")
+        description.setWordWrap(True)
+        description.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(description)
+        
+        # 获取当前用户兴趣标签
+        user_interests = self.global_settings.get("user_interests", [])
+        
+        # 创建标签编辑器 - 4行高
+        self.tag_editor = TagEditor(rows=4)
+        if user_interests:
+            self.tag_editor.set_tags(user_interests)
+        
+        layout.addWidget(self.tag_editor)
+        layout.addStretch()
+        
+        self.tabs.addTab(interests_tab, "Interest Tags")
+
     def save_settings(self):
         """Save all settings to config"""
         # Email settings
@@ -294,12 +322,16 @@ class SettingsWindow(QDialog):
             "show_notifications": self.show_notifications.isChecked(),
         }
         
-        # Update global settings in config
-        self.global_settings = {
+        # 保存用户兴趣标签
+        user_interests = self.tag_editor.get_tags()
+        
+        # 更新全局设置
+        self.global_settings.update({
             "email_settings": email_settings,
             "ai_settings": ai_settings,
             "general_settings": general_settings,
-        }
+            "user_interests": user_interests  # 添加用户兴趣标签
+        })
         
         self.config["global_settings"] = self.global_settings
         save_config(self.config)
