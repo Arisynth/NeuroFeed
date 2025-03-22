@@ -4,7 +4,8 @@
             "id": "1b8a93dd-929c-4b1b-88d7-2bca6d19ac58",
             "name": "Patrick",
             "rss_feeds": [
-                "https://www.ithome.com/rss/"
+                "https://www.ithome.com/rss/",
+                "https://www.ithome.com/rss"
             ],
             "schedule": {
                 "type": "daily",
@@ -13,7 +14,19 @@
             "recipients": [],
             "ai_settings": {
                 "summary_length": "medium"
-            }
+            },
+            "feeds_status": {
+                "https://www.ithome.com/rss/": {
+                    "status": "success",
+                    "last_fetch": "2025-03-22T19:30:18.727743"
+                },
+                "https://www.ithome.com/rss": {
+                    "status": "success",
+                    "last_fetch": "2025-03-22T19:30:42.667993"
+                }
+            },
+            "recipients_status": {},
+            "last_run": null
         },
         {
             "id": "b5290f65-586b-4736-98bf-bb6a33371003",
