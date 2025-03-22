@@ -13,12 +13,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("scheduler")
 
 def execute_task(task_id=None):
-    """执行指定任务或所有任务
-    
-    Args:
-        task_id: 特定任务ID，如果为None则执行所有任务
-    """
+    """执行指定任务或所有任务"""
+    logger.info(f"\n=====================================================")
     logger.info(f"开始执行{'指定' if task_id else '所有'}任务")
+    logger.info(f"=====================================================\n")
     
     # 加载配置和任务
     config = load_config()
@@ -69,93 +67,164 @@ def execute_task(task_id=None):
     # 逐个处理任务
     for task in tasks:
         try:
+            logger.info(f"\n=====================================================")
             logger.info(f"开始处理任务: {task.name} (ID: {task.task_id})")
-            logger.info(f"任务配置: {len(task.rss_feeds)} 个RSS源, {len(task.recipients)} 个接收者")
+            logger.info(f"=====================================================\n")
+            
+            logger.info(f"任务详情:")
+            logger.info(f"  - 名称: {task.name}")
+            logger.info(f"  - RSS源数量: {len(task.rss_feeds)}")
+            logger.info(f"  - 接收者数量: {len(task.recipients)}")
+            
+            if task.last_run:
+                logger.info(f"  - 上次运行时间: {task.last_run}")
+            else:
+                logger.info(f"  - 首次运行")
             
             # 构建feed配置列表
             feed_configs = []
-            for feed_url in task.rss_feeds:
+            logger.info(f"\n============ RSS源配置 ============")
+            for idx, feed_url in enumerate(task.rss_feeds):
                 items_count = task.get_feed_items_count(feed_url)
                 feed_labels = task.get_feed_labels(feed_url)
-                logger.info(f"RSS源配置: {feed_url}, 获取 {items_count} 条, 标签: {feed_labels}")
+                logger.info(f"RSS源 #{idx+1}:")
+                logger.info(f"  URL: {feed_url}")
+                logger.info(f"  获取条目数: {items_count}")
+                logger.info(f"  标签: {feed_labels}")
+                
+                # 获取历史状态
+                status_info = task.feeds_status.get(feed_url, {})
+                last_status = status_info.get("status", "未知")
+                last_fetch = status_info.get("last_fetch", "从未")
+                logger.info(f"  上次状态: {last_status}")
+                logger.info(f"  上次获取时间: {last_fetch}")
+                
                 feed_configs.append({
                     "url": feed_url,
                     "items_count": items_count
                 })
             
-            # 获取用户兴趣标签 - 这里不再需要全局标签，因为我们会使用每个feed特定的标签
-            # 但我们仍需要知道全局配置用于某些默认值
+            # 获取用户兴趣标签
             global_interests = config.get("global_settings", {}).get("user_interests", [])
-            logger.info(f"全局兴趣标签: {global_interests} (仅用作默认值)")
+            logger.info(f"\n全局兴趣标签: {global_interests} (仅用作默认值)")
             
             # 批量获取RSS feed
-            logger.info(f"开始获取 {len(feed_configs)} 个RSS源")
+            logger.info(f"\n============ 开始获取Feed内容 ============")
+            logger.info(f"准备获取 {len(feed_configs)} 个RSS源")
             feed_results = rss_parser.fetch_multiple_feeds(feed_configs)
             
-            # 更新feed状态
+            # 更新feed状态和收集统计信息
             total_items = 0
+            success_feeds = 0
+            failed_feeds = 0
+            
+            logger.info(f"\n============ RSS源获取结果 ============")
             for feed_url, result in feed_results.items():
                 status = result["status"]
                 items_count = len(result.get("items", []))
                 total_items += items_count
-                logger.info(f"RSS源 {feed_url} 获取状态: {status}, 获取到 {items_count} 条内容")
+                
+                if status == "success":
+                    success_feeds += 1
+                    logger.info(f"Feed获取成功: {feed_url}")
+                    logger.info(f"  - 获取到 {items_count} 条内容")
+                    if "feed_info" in result:
+                        feed_info = result["feed_info"]
+                        logger.info(f"  - Feed标题: {feed_info.get('title', '未知')}")
+                else:
+                    failed_feeds += 1
+                    error_msg = result.get("error", "未知错误")
+                    logger.error(f"Feed获取失败: {feed_url}")
+                    logger.error(f"  - 错误: {error_msg}")
+                
                 task.update_feed_status(feed_url, result["status"])
+            
+            logger.info(f"\n============ RSS源获取统计 ============")
+            logger.info(f"总Feed数: {len(feed_configs)}")
+            logger.info(f"成功Feed数: {success_feeds}")
+            logger.info(f"失败Feed数: {failed_feeds}")
+            logger.info(f"总条目数: {total_items}")
             
             # 收集所有内容
             all_contents = []
+            logger.info(f"\n============ 整合内容 ============")
             for feed_url, result in feed_results.items():
                 if result["status"] == "success":
                     items = result.get("items", [])
                     
                     # 为每个条目添加feed特定标签
                     feed_labels = task.get_feed_labels(feed_url)
-                    logger.info(f"处理RSS源 {feed_url} 的 {len(items)} 条内容, 添加标签: {feed_labels}")
+                    logger.info(f"从 {feed_url} 添加 {len(items)} 条内容，标签: {feed_labels}")
                     
                     for i, item in enumerate(items):
                         item["feed_url"] = feed_url
-                        item["feed_labels"] = feed_labels  # 这些是该RSS源特有的标签
-                        # 记录内容摘要
+                        item["feed_labels"] = feed_labels
                         title = item.get("title", "无标题")
-                        logger.info(f"内容 #{i+1}: {title[:50]}{'...' if len(title) > 50 else ''}")
+                        # 只记录前3个条目的详细信息，避免日志过多
+                        if i < 3:
+                            logger.info(f"  - 条目 #{i+1}: {title}")
                     
                     all_contents.extend(items)
             
             if not all_contents:
                 logger.warning(f"任务 {task.name} 未获取到任何内容，跳过过滤步骤")
                 continue
-                
+            
             # 应用内容过滤器 - 传入所有内容但不再传入全局兴趣标签
-            logger.info(f"开始过滤 {len(all_contents)} 条内容, 使用AI: {content_filter.ai_available}")
+            logger.info(f"\n============ 开始内容过滤 ============")
+            logger.info(f"待过滤内容总数: {len(all_contents)}")
+            logger.info(f"AI可用状态: {content_filter.ai_available}")
+            logger.info(f"AI模型: {content_filter.ollama_model if content_filter.provider == 'ollama' else content_filter.openai_model}")
+            
             kept_contents, discarded_contents = content_filter.filter_content_batch(all_contents)
             
-            logger.info(f"任务 {task.name} 完成: 保留 {len(kept_contents)}/{len(all_contents)} 条内容, 丢弃 {len(discarded_contents)} 条")
+            # 记录过滤结果的详细统计
+            logger.info(f"\n============ 过滤结果 ============")
+            logger.info(f"任务: {task.name}")
+            logger.info(f"总内容数: {len(all_contents)}")
+            logger.info(f"保留内容数: {len(kept_contents)} ({len(kept_contents)/len(all_contents)*100:.1f}%)")
+            logger.info(f"丢弃内容数: {len(discarded_contents)} ({len(discarded_contents)/len(all_contents)*100:.1f}%)")
             
-            # 记录保留的内容标题
-            for i, content in enumerate(kept_contents):
-                title = content.get("title", "无标题")
-                keep_reason = "未提供原因"
+            # 按标签统计
+            logger.info(f"\n============ 标签匹配统计 ============")
+            tag_stats = {}
+            matched_count = 0
+            for content in kept_contents:
                 if "evaluation" in content:
                     eval_data = content["evaluation"]
-                    is_match = eval_data.get("interest_match", {}).get("is_match", False)
-                    importance = eval_data.get("importance", {}).get("rating", "未知")
-                    timeliness = eval_data.get("timeliness", {}).get("rating", "未知")
-                    interest_level = eval_data.get("interest_level", {}).get("rating", "未知")
-                    keep_reason = f"兴趣匹配: {is_match}, 重要性: {importance}, 时效性: {timeliness}, 趣味性: {interest_level}"
-                logger.info(f"保留内容 #{i+1}: {title[:50]}{'...' if len(title) > 50 else ''} - {keep_reason}")
+                    if eval_data["interest_match"]["is_match"]:
+                        matched_count += 1
+                        for tag in eval_data["interest_match"]["matched_tags"]:
+                            if tag in tag_stats:
+                                tag_stats[tag] += 1
+                            else:
+                                tag_stats[tag] = 1
+            
+            logger.info(f"匹配兴趣标签的内容: {matched_count}/{len(kept_contents)}")
+            for tag, count in tag_stats.items():
+                logger.info(f"  - 标签 '{tag}': {count} 条")
             
             # 更新任务的last_run时间
             task.update_task_run()
             save_task(task)
             
             # TODO: 存储过滤后的内容，以便后续加工
-            logger.info(f"任务 {task.name} 执行完毕, 待进一步处理")
+            logger.info(f"\n============ 任务执行完成 ============")
+            logger.info(f"任务: {task.name}")
+            logger.info(f"保留内容数: {len(kept_contents)}")
+            logger.info(f"总耗时: {(datetime.now() - datetime.fromisoformat(task.last_run)).total_seconds():.2f} 秒")
             
         except Exception as e:
             import traceback
-            logger.error(f"执行任务 {task.name} 时出错: {str(e)}")
-            logger.error(f"详细错误信息: {traceback.format_exc()}")
+            logger.error(f"\n============ 任务执行出错 ============")
+            logger.error(f"任务: {task.name}")
+            logger.error(f"错误类型: {type(e).__name__}")
+            logger.error(f"错误信息: {str(e)}")
+            logger.error(f"详细追踪:\n{traceback.format_exc()}")
     
-    logger.info("所有任务执行完成")
+    logger.info(f"\n=====================================================")
+    logger.info(f"所有任务执行完成")
+    logger.info(f"=====================================================\n")
 
 def setup_scheduled_tasks():
     """设置所有定时任务"""

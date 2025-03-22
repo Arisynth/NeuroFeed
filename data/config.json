@@ -17,7 +17,7 @@
             "feeds_status": {
                 "https://www.ithome.com/rss/": {
                     "status": "success",
-                    "last_fetch": "2025-03-22T23:44:59.902568"
+                    "last_fetch": "2025-03-23T01:05:13.908272"
                 },
                 "https://www.ithome.com/rss": {
                     "status": "success",
@@ -25,10 +25,10 @@
                 }
             },
             "recipients_status": {},
-            "last_run": "2025-03-22T23:46:46.235800",
+            "last_run": "2025-03-23T01:08:05.043268",
             "feed_config": {
                 "https://www.ithome.com/rss/": {
-                    "items_count": 3,
+                    "items_count": 5,
                     "labels": [
                         "\u4f53\u80b2",
                         "\u7535\u5b50",

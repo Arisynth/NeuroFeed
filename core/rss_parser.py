@@ -23,17 +23,11 @@ class RssParser:
         self.session.headers.update({"User-Agent": user_agent})
     
     def fetch_feed(self, feed_url: str, items_count: int = 10) -> Dict[str, Any]:
-        """获取RSS Feed内容
-        
-        Args:
-            feed_url: RSS Feed的URL
-            items_count: 获取的条目数量
-            
-        Returns:
-            包含成功/失败状态和Feed内容的字典
-        """
+        """获取RSS Feed内容"""
         try:
-            logger.info(f"开始获取Feed: {feed_url}, 计划获取 {items_count} 条内容")
+            logger.info(f"\n============ 开始获取Feed ============")
+            logger.info(f"Feed URL: {feed_url}")
+            logger.info(f"计划获取条目数量: {items_count}")
             start_time = time.time()
             
             # 使用feedparser解析RSS Feed
@@ -71,7 +65,15 @@ class RssParser:
             entries = feed.entries[:items_count]
             processed_entries = []
             
+            # 显示Feed基本信息
+            feed_title = feed.feed.title if hasattr(feed, 'feed') and hasattr(feed.feed, 'title') else "未知"
+            feed_desc = feed.feed.description if hasattr(feed, 'feed') and hasattr(feed.feed, 'description') else "无描述"
+            feed_desc_short = feed_desc[:100] + "..." if len(feed_desc) > 100 else feed_desc
+            logger.info(f"Feed标题: {feed_title}")
+            logger.info(f"Feed描述: {feed_desc_short}")
+            
             # 处理每个条目
+            logger.info(f"\n============ 处理Feed条目 ============")
             for i, entry in enumerate(entries):
                 # 提取发布日期，如果存在
                 published_date = None
@@ -87,39 +89,53 @@ class RssParser:
                 # 获取标题和链接
                 title = entry.title if hasattr(entry, 'title') else "无标题"
                 link = entry.link if hasattr(entry, 'link') else ""
-                logger.info(f"处理条目 #{i+1}: {title[:50]}{'...' if len(title) > 50 else ''}")
+                logger.info(f"条目 #{i+1} 标题: {title}")
+                logger.info(f"条目 #{i+1} 链接: {link}")
+                
+                # 获取摘要
+                summary = entry.summary if hasattr(entry, 'summary') else ""
+                summary_short = summary[:200] + "..." if len(summary) > 200 else summary
+                logger.info(f"条目 #{i+1} 摘要: {summary_short}")
                 
                 # 构建条目字典
                 processed_entry = {
                     "title": title,
                     "link": link,
-                    "summary": entry.summary if hasattr(entry, 'summary') else "",
+                    "summary": summary,
                     "published": published_date,
                     "source": feed.feed.title if hasattr(feed, 'feed') and hasattr(feed.feed, 'title') else feed_url,
-                    "content": entry.content[0].value if hasattr(entry, 'content') and entry.content else entry.summary if hasattr(entry, 'summary') else "",
+                    "content": entry.content[0].value if hasattr(entry, 'content') and entry.content else summary if hasattr(entry, 'summary') else "",
                 }
+                
+                # 记录内容长度
+                content_len = len(processed_entry["content"])
+                logger.info(f"条目 #{i+1} 内容长度: {content_len} 字符")
+                
                 processed_entries.append(processed_entry)
             
             elapsed_time = time.time() - start_time
-            logger.info(f"成功获取Feed: {feed_url}，获取了{len(processed_entries)}个条目，耗时{elapsed_time:.2f}秒")
-            
-            feed_title = feed.feed.title if hasattr(feed, 'feed') and hasattr(feed.feed, 'title') else "未知"
-            logger.info(f"Feed信息: 标题={feed_title}")
+            logger.info(f"\n============ Feed获取完成 ============")
+            logger.info(f"Feed URL: {feed_url}")
+            logger.info(f"获取条目数: {len(processed_entries)}")
+            logger.info(f"耗时: {elapsed_time:.2f}秒")
             
             return {
                 "status": "success",
                 "items": processed_entries,
                 "feed_info": {
                     "title": feed_title,
-                    "description": feed.feed.description if hasattr(feed, 'feed') and hasattr(feed.feed, 'description') else "",
+                    "description": feed_desc,
                     "link": feed.feed.link if hasattr(feed, 'feed') and hasattr(feed.feed, 'link') else feed_url
                 }
             }
         
         except Exception as e:
             import traceback
-            logger.error(f"获取Feed失败: {feed_url}, 错误: {str(e)}")
-            logger.error(f"详细错误信息: {traceback.format_exc()}")
+            logger.error(f"\n============ Feed获取失败 ============")
+            logger.error(f"Feed URL: {feed_url}")
+            logger.error(f"错误类型: {type(e).__name__}")
+            logger.error(f"错误信息: {str(e)}")
+            logger.error(f"详细追踪:\n{traceback.format_exc()}")
             return {
                 "status": "fail",
                 "error": str(e),
