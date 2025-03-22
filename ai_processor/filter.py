@@ -1,13 +1,10 @@
 import logging
-import json
 from typing import List, Dict, Any, Optional, Tuple
-import requests
 from enum import Enum
-import os
 from datetime import datetime
+from ai_processor.ai_utils import AiService
 
 # 配置日志
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("content_filter")
 
 # 定义评分等级枚举类型
@@ -29,43 +26,14 @@ class ContentFilter:
             config: 包含AI设置的配置字典
         """
         self.config = config or {}
-        # 从配置加载AI设置
-        self.ai_settings = self.config.get("global_settings", {}).get("ai_settings", {})
-        self.provider = self.ai_settings.get("provider", "ollama")
-        self.ai_available = True  # 用于跟踪AI服务可用性
-        self.connection_errors = 0  # 连接错误计数
-        self.ai_error_threshold = 3  # 超过此阈值时切换到无AI模式
+        # 使用共享的AI服务
+        self.ai_service = AiService(config)
         
-        if self.provider == "ollama":
-            self.ollama_host = self.ai_settings.get("ollama_host", "http://localhost:11434")
-            self.ollama_model = self.ai_settings.get("ollama_model", "llama2")
-            
-            # 检查Ollama是否可用
-            if not self._check_ollama_availability():
-                self.ai_available = False
-                logger.warning(f"Ollama在{self.ollama_host}不可用，将使用基于规则的过滤")
-        else:  # OpenAI
-            self.openai_key = self.ai_settings.get("openai_key", "")
-            self.openai_model = self.ai_settings.get("openai_model", "gpt-3.5-turbo")
-            
-            # 检查OpenAI是否可用
-            if not self.openai_key:
-                self.ai_available = False
-                logger.warning("未提供OpenAI API密钥，将使用基于规则的过滤")
-    
-    def _check_ollama_availability(self) -> bool:
-        """检查Ollama服务是否可用
-        
-        Returns:
-            布尔值表示是否可用
-        """
-        try:
-            # 尝试ping Ollama，5秒超时
-            response = requests.get(f"{self.ollama_host}/api/tags", timeout=5)
-            return response.status_code == 200
-        except Exception as e:
-            logger.warning(f"无法连接到Ollama: {str(e)}")
-            return False
+        # 获取AI服务的可用状态和提供商
+        self.ai_available = self.ai_service.ai_available
+        self.provider = self.ai_service.provider
+        self.ollama_model = getattr(self.ai_service, 'ollama_model', '')
+        self.openai_model = getattr(self.ai_service, 'openai_model', '')
     
     def evaluate_content(self, content: Dict[str, Any]) -> Dict[str, Any]:
         """评估新闻内容，检查是否符合用户兴趣，并评价重要性、时效性、趣味性"""
@@ -97,9 +65,9 @@ class ContentFilter:
             except (ValueError, TypeError):
                 logger.info("无法解析发布时间格式")
         
-        # 如果过多连接错误或AI不可用，使用基于规则的方法
-        if not self.ai_available or self.connection_errors >= self.ai_error_threshold:
-            logger.info(f"AI评估不可用: AI可用={self.ai_available}, 连接错误={self.connection_errors}")
+        # 如果AI不可用，使用基于规则的方法
+        if not self.ai_available:
+            logger.info(f"AI评估不可用: AI可用={self.ai_available}")
             logger.info(f"将使用基于规则的评估方法")
             return self._evaluate_content_rule_based(content)
         
@@ -109,14 +77,9 @@ class ContentFilter:
         logger.info(f"提示词前100字符: {prompt[:100]}...")
         
         try:
-            # 根据提供者调用AI
-            logger.info(f"使用{self.provider}评估内容, 模型: {self.ollama_model if self.provider == 'ollama' else self.openai_model}")
-            if self.provider == "ollama":
-                logger.info(f"调用Ollama (模型: {self.ollama_model}, 主机: {self.ollama_host})")
-                evaluation = self._call_ollama(prompt)
-            else:
-                logger.info(f"调用OpenAI (模型: {self.openai_model})")
-                evaluation = self._call_openai(prompt)
+            # 调用AI服务
+            logger.info(f"使用{self.provider}评估内容, 模型: {self.ollama_model or self.openai_model}")
+            evaluation = self.ai_service.call_ai(prompt)
             
             # 如果评估成功
             if evaluation:
@@ -138,18 +101,13 @@ class ContentFilter:
                     "evaluation": evaluation_result,
                     "keep": self._should_keep_content(evaluation_result)
                 })
-                
-                # 成功情况下重置连接错误计数
-                self.connection_errors = 0
             else:
-                # 评估失败，增加错误计数并使用规则方法
-                self.connection_errors += 1
-                logger.warning(f"AI评估失败 ({self.connection_errors}/{self.ai_error_threshold})，回退到规则方法")
+                # 评估失败，使用规则方法
+                logger.warning(f"AI评估失败，回退到规则方法")
                 return self._evaluate_content_rule_based(content)
         except Exception as e:
-            # 出现异常，增加错误计数并使用规则方法
-            self.connection_errors += 1
-            logger.error(f"评估内容时出错: {str(e)}，回退到规则方法 ({self.connection_errors}/{self.ai_error_threshold})")
+            # 出现异常，使用规则方法
+            logger.error(f"评估内容时出错: {str(e)}，回退到规则方法")
             return self._evaluate_content_rule_based(content)
         
         return content
@@ -284,147 +242,59 @@ class ContentFilter:
 请只返回JSON格式的评估结果，不要有任何其他文本。
 """
     
-    def _call_ollama(self, prompt: str) -> str:
-        """调用Ollama API进行评估
-        
-        Args:
-            prompt: 评估提示词
-            
-        Returns:
-            Ollama的响应文本
-        """
-        try:
-            # 增加超时时间，解决超时问题
-            response = requests.post(
-                f"{self.ollama_host}/api/generate",
-                json={
-                    "model": self.ollama_model,
-                    "prompt": prompt,
-                    "stream": False
-                },
-                timeout=60  # 增加超时时间到60秒
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                return data.get("response", "")
-            else:
-                logger.error(f"Ollama API错误: {response.status_code}, {response.text}")
-                return ""
-        except Exception as e:
-            logger.error(f"调用Ollama时出错: {str(e)}")
-            return ""
-    
-    def _call_openai(self, prompt: str) -> str:
-        """调用OpenAI API进行评估
-        
-        Args:
-            prompt: 评估提示词
-            
-        Returns:
-            OpenAI的响应文本
-        """
-        try:
-            headers = {
-                "Authorization": f"Bearer {self.openai_key}",
-                "Content-Type": "application/json"
-            }
-            
-            data = {
-                "model": self.openai_model,
-                "messages": [
-                    {"role": "system", "content": "你是一个专业的新闻分析和评估助手。"},
-                    {"role": "user", "content": prompt}
-                ]
-            }
-            
-            response = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers=headers,
-                json=data,
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                response_data = response.json()
-                return response_data["choices"][0]["message"]["content"]
-            else:
-                logger.error(f"OpenAI API错误: {response.status_code}, {response.text}")
-                return ""
-        except Exception as e:
-            logger.error(f"调用OpenAI时出错: {str(e)}")
-            return ""
-    
     def _parse_evaluation(self, evaluation_text: str) -> Dict[str, Any]:
         """解析AI评估结果"""
         # 记录AI的完整响应
         logger.info(f"\n============ AI响应内容 ============")
         logger.info(f"AI响应原文 ({len(evaluation_text)} 字符):\n{evaluation_text}\n")
         
-        # 默认结果
-        default_result = {
-            "interest_match": {
-                "is_match": False,
-                "matched_tags": [],
-                "explanation": "无法解析AI评估结果"
-            },
-            "importance": {
-                "rating": RatingLevel.UNKNOWN,
-                "explanation": "无法解析AI评估结果"
-            },
-            "timeliness": {
-                "rating": RatingLevel.UNKNOWN,
-                "explanation": "无法解析AI评估结果"
-            },
-            "interest_level": {
-                "rating": RatingLevel.UNKNOWN,
-                "explanation": "无法解析AI评估结果"
-            }
-        }
+        # 使用共享的AI服务解析JSON
+        result = self.ai_service.parse_json_response(evaluation_text)
         
-        try:
-            # 尝试提取JSON字符串
-            # 查找第一个 { 和最后一个 } 之间的内容
-            start_idx = evaluation_text.find('{')
-            end_idx = evaluation_text.rfind('}') + 1
-            
-            if start_idx == -1 or end_idx == 0:
-                logger.warning("从AI响应中找不到JSON")
-                return default_result
-                
-            json_str = evaluation_text[start_idx:end_idx]
-            result = json.loads(json_str)
-            
-            # 验证结果结构
-            if not all(k in result for k in ["interest_match", "importance", "timeliness", "interest_level"]):
-                logger.warning("AI响应缺少必要的评估字段")
-                return default_result
-                
-            # 记录解析结果
-            if 'result' in locals() and result != default_result:
-                is_match = result["interest_match"]["is_match"]
-                matched_tags = result["interest_match"]["matched_tags"]
-                importance = result["importance"]["rating"]
-                timeliness = result["timeliness"]["rating"]
-                interest_level = result["interest_level"]["rating"]
-                
-                logger.info(f"\n============ AI评估结果 ============")
-                logger.info(f"兴趣匹配: {is_match}")
-                logger.info(f"匹配标签: {matched_tags}")
-                logger.info(f"匹配解释: {result['interest_match']['explanation']}")
-                logger.info(f"重要性: {importance}")
-                logger.info(f"重要性解释: {result['importance']['explanation']}")
-                logger.info(f"时效性: {timeliness}")
-                logger.info(f"时效性解释: {result['timeliness']['explanation']}")
-                logger.info(f"趣味性: {interest_level}")
-                logger.info(f"趣味性解释: {result['interest_level']['explanation']}")
-            else:
-                logger.warning("无法解析AI响应为有效JSON或响应格式不正确")
-            
-            return result
-        except json.JSONDecodeError as e:
-            logger.error(f"解析AI评估结果时出错: {str(e)}, 原始文本: {evaluation_text}")
+        # 如果解析失败，返回默认结果
+        if not result or not all(k in result for k in ["interest_match", "importance", "timeliness", "interest_level"]):
+            logger.warning("AI响应缺少必要的评估字段或解析失败")
+            # 创建默认结果
+            default_result = {
+                "interest_match": {
+                    "is_match": False,
+                    "matched_tags": [],
+                    "explanation": "无法解析AI评估结果"
+                },
+                "importance": {
+                    "rating": RatingLevel.UNKNOWN,
+                    "explanation": "无法解析AI评估结果"
+                },
+                "timeliness": {
+                    "rating": RatingLevel.UNKNOWN,
+                    "explanation": "无法解析AI评估结果"
+                },
+                "interest_level": {
+                    "rating": RatingLevel.UNKNOWN,
+                    "explanation": "无法解析AI评估结果"
+                }
+            }
             return default_result
+        
+        # 记录解析结果
+        is_match = result["interest_match"]["is_match"]
+        matched_tags = result["interest_match"]["matched_tags"]
+        importance = result["importance"]["rating"]
+        timeliness = result["timeliness"]["rating"]
+        interest_level = result["interest_level"]["rating"]
+        
+        logger.info(f"\n============ AI评估结果 ============")
+        logger.info(f"兴趣匹配: {is_match}")
+        logger.info(f"匹配标签: {matched_tags}")
+        logger.info(f"匹配解释: {result['interest_match']['explanation']}")
+        logger.info(f"重要性: {importance}")
+        logger.info(f"重要性解释: {result['importance']['explanation']}")
+        logger.info(f"时效性: {timeliness}")
+        logger.info(f"时效性解释: {result['timeliness']['explanation']}")
+        logger.info(f"趣味性: {interest_level}")
+        logger.info(f"趣味性解释: {result['interest_level']['explanation']}")
+            
+        return result
     
     def _should_keep_content(self, evaluation: Dict[str, Any]) -> bool:
         """根据评估结果决定是否保留内容"""
