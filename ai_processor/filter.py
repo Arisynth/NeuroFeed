@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional, Tuple
 import requests
 from enum import Enum
 import os
+from datetime import datetime
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -71,6 +72,7 @@ class ContentFilter:
         title = content.get("title", "无标题")
         summary = content.get("summary", "")
         feed_labels = content.get("feed_labels", [])
+        published_date = content.get("published", "未知")
         
         # 更详细地记录内容
         logger.info(f"\n============ 开始评估内容 ============")
@@ -78,14 +80,22 @@ class ContentFilter:
         logger.info(f"链接: {content.get('link', '无链接')}")
         logger.info(f"来源: {content.get('source', '未知来源')}")
         logger.info(f"RSS源标签: {feed_labels}")
+        logger.info(f"当前时间: {datetime.now().isoformat()}")
         
         # 打印摘要（截断以防太长）
         summary_to_log = summary[:500] + "..." if len(summary) > 500 else summary
         logger.info(f"摘要: {summary_to_log}")
         
         # 打印发布时间
-        if "published" in content and content["published"]:
-            logger.info(f"发布时间: {content['published']}")
+        if published_date != "未知":
+            logger.info(f"发布时间: {published_date}")
+            # 如果有发布时间，计算内容的年龄
+            try:
+                pub_datetime = datetime.fromisoformat(published_date)
+                age = datetime.now() - pub_datetime
+                logger.info(f"内容年龄: {age.days} 天 {age.seconds//3600} 小时")
+            except (ValueError, TypeError):
+                logger.info("无法解析发布时间格式")
         
         # 如果过多连接错误或AI不可用，使用基于规则的方法
         if not self.ai_available or self.connection_errors >= self.ai_error_threshold:
@@ -223,6 +233,12 @@ class ContentFilter:
         full_content = content.get("content", "")
         feed_labels = content.get("feed_labels", [])
         
+        # 获取当前日期时间信息
+        current_datetime = datetime.now()
+        current_date_str = current_datetime.strftime("%Y年%m月%d日")
+        current_time_str = current_datetime.strftime("%H:%M:%S")
+        current_weekday = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"][current_datetime.weekday()]
+        
         # 如果摘要或全文很长，进行截断
         if len(summary) > 1000:
             summary = summary[:1000] + "..."
@@ -232,10 +248,19 @@ class ContentFilter:
         # 将兴趣标签格式化为字符串 - 使用RSS源特定的标签
         interests_str = ", ".join([f'"{tag}"' for tag in feed_labels])
         
+        # 提取内容的发布时间（如果有）进行记录
+        content_published = content.get("published", "未知")
+        published_info = f"发布时间：{content_published}" if content_published else "发布时间：未提供"
+        
         return f"""请分析以下新闻内容，并根据给定标准进行评估：
+
+## 当前时间信息
+当前日期：{current_date_str} {current_weekday}
+当前时间：{current_time_str}
 
 ## 新闻内容
 标题：{title}
+{published_info}
 摘要：{summary}
 全文：{full_content}
 
@@ -245,7 +270,12 @@ class ContentFilter:
 ## 评估要求
 1. 兴趣匹配：这条新闻是否符合该RSS源关注的标签？如果有，请指明具体匹配的标签；如果不符合任何标签，请说明。
 2. 重要性：这条新闻的重要性如何？（极低、低、中、高、极高）
-3. 时效性：这条新闻的时效性如何？（极低、低、中、高、极高）
+3. 时效性：考虑当前日期（{current_date_str}），该新闻的时效性如何？（极低、低、中、高、极高）
+   - 极高：今日/昨日的突发新闻或重大事件
+   - 高：本周内的重要发展或更新
+   - 中：本月内的相关信息
+   - 低：几个月前的旧闻或一般性信息
+   - 极低：明显过时或与当前环境无关的内容
 4. 趣味性：这条新闻的趣味性如何？（极低、低、中、高、极高）
 
 请按以下JSON格式返回评估结果：
