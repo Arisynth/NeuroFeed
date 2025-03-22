@@ -38,8 +38,12 @@ class Task:
     @classmethod
     def from_dict(cls, data):
         """Create a Task instance from dictionary data"""
-        return cls(
-            task_id=data.get("id"),
+        # Add debug logging to help troubleshoot
+        task_id = data.get("id")
+        
+        # Create the task instance
+        task = cls(
+            task_id=task_id,
             name=data.get("name", ""),
             rss_feeds=data.get("rss_feeds", []),
             schedule=data.get("schedule", {"type": "daily", "time": "08:00"}),
@@ -50,6 +54,8 @@ class Task:
             last_run=data.get("last_run"),
             feed_config=data.get("feed_config", {})
         )
+        
+        return task
     
     def update_feed_status(self, feed_url, status="success"):
         """Update the status of a feed"""

@@ -9,6 +9,7 @@ from core.config_manager import load_config, save_config, get_tasks, save_task, 
 from core.task_model import Task
 from datetime import datetime
 from gui.tag_editor import TagEditor
+from core.scheduler import run_task_now
 
 class FeedConfigDialog(QDialog):
     """Dialog to configure RSS feed settings"""
@@ -576,14 +577,38 @@ class MainWindow(QMainWindow):
         if not self.current_task:
             return
             
-        # TODO: Implement actual task execution
-        # For now, just update the last run time
-        self.current_task.update_task_run()
-        save_task(self.current_task)
-        self.update_ui_from_task()
+        # 更新按钮状态，防止重复点击
+        self.run_now_btn.setEnabled(False)
+        self.run_now_btn.setText("Running...")
         
+        # 首先保存最新的任务状态到配置文件
+        save_task(self.current_task)
+        
+        # 向用户显示任务已经开始的提示
         QMessageBox.information(self, "Task Started", 
-                               f"The task '{self.current_task.name}' has started. Results will be emailed shortly.")
+                              f"The task '{self.current_task.name}' has started in background.\n\n"
+                              f"This may take some time, especially if using AI filtering.\n"
+                              f"You can continue using the application while the task runs.")
+        
+        try:
+            # 记录任务ID用于调试
+            task_id = self.current_task.task_id
+            print(f"Running task with ID: {task_id}")
+            
+            # 调用scheduler中的方法立即执行任务
+            run_task_now(task_id)
+            
+            # 由于任务在后台线程执行，这里只更新UI状态
+            self.current_task.update_task_run()
+            save_task(self.current_task)
+            self.update_ui_from_task()
+        except Exception as e:
+            QMessageBox.critical(self, "Task Error", 
+                               f"Error starting task: {str(e)}")
+        finally:
+            # 恢复按钮状态
+            self.run_now_btn.setEnabled(True)
+            self.run_now_btn.setText("Run Now")
     
     def open_settings(self):
         """Open the settings window"""

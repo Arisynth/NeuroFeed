@@ -1,0 +1,4 @@
+PyQt6==6.6.1
+schedule==1.2.1
+feedparser==6.0.10
+requests==2.31.0
