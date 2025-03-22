@@ -43,6 +43,23 @@
         }
     ],
     "global_settings": {
-        "email_settings": {}
+        "email_settings": {
+            "smtp_server": "",
+            "smtp_port": 587,
+            "smtp_security": "STARTTLS",
+            "sender_email": "",
+            "remember_password": false
+        },
+        "ai_settings": {
+            "provider": "ollama",
+            "ollama_host": "http://localhost:11434",
+            "ollama_model": "qwen2.5:14b",
+            "openai_model": "gpt-3.5-turbo"
+        },
+        "general_settings": {
+            "start_on_boot": false,
+            "minimize_to_tray": true,
+            "show_notifications": true
+        }
     }
 }

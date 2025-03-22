@@ -9,12 +9,26 @@ def load_config():
         if os.path.exists(CONFIG_PATH) and os.path.getsize(CONFIG_PATH) > 0:
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
                 return json.load(f)
-        # Return default config with tasks array
-        return {"tasks": [], "global_settings": {}}
+        # Return default config with tasks array and global settings
+        return {
+            "tasks": [], 
+            "global_settings": {
+                "email_settings": {},
+                "ai_settings": {"provider": "ollama"},
+                "general_settings": {"minimize_to_tray": True}
+            }
+        }
     except json.JSONDecodeError:
         # If the file contains invalid JSON, return empty dict
         print(f"Warning: Config file at {CONFIG_PATH} contains invalid JSON. Using default configuration.")
-        return {"tasks": [], "global_settings": {}}
+        return {
+            "tasks": [], 
+            "global_settings": {
+                "email_settings": {},
+                "ai_settings": {"provider": "ollama"},
+                "general_settings": {"minimize_to_tray": True}
+            }
+        }
 
 def save_config(config):
     # Ensure the directory exists

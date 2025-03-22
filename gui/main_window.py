@@ -1,12 +1,48 @@
 from PyQt6.QtWidgets import (QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, 
                             QListWidget, QPushButton, QWidget, QInputDialog, 
                             QMessageBox, QDialog, QComboBox, QFormLayout,
-                            QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView)
+                            QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView,
+                            QSpinBox, QDialogButtonBox)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from core.config_manager import load_config, save_config, get_tasks, save_task, delete_task
 from core.task_model import Task
 from datetime import datetime
+
+class FeedConfigDialog(QDialog):
+    """Dialog to configure RSS feed settings"""
+    def __init__(self, parent=None, feed_url="", items_count=10):
+        super().__init__(parent)
+        self.setWindowTitle("RSS Feed Configuration")
+        self.resize(400, 150)
+        
+        layout = QVBoxLayout(self)
+        
+        form_layout = QFormLayout()
+        
+        self.url_input = QLineEdit(feed_url)
+        self.count_input = QSpinBox()
+        self.count_input.setRange(1, 100)
+        self.count_input.setValue(items_count)
+        self.count_input.setSuffix(" items")
+        
+        form_layout.addRow("RSS Feed URL:", self.url_input)
+        form_layout.addRow("Number of news items to fetch:", self.count_input)
+        
+        layout.addLayout(form_layout)
+        
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        
+        layout.addWidget(buttons)
+    
+    def get_feed_url(self):
+        return self.url_input.text()
+    
+    def get_items_count(self):
+        return self.count_input.value()
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -80,14 +116,17 @@ class MainWindow(QMainWindow):
         # Feed control buttons
         feed_controls_layout = QHBoxLayout()
         self.add_feed_btn = QPushButton("Add Feed")
+        self.edit_feed_btn = QPushButton("Edit Feed")  # New button
         self.remove_feed_btn = QPushButton("Remove Feed")
         self.test_feed_btn = QPushButton("Test Feed")  # Added test feed button
         
         self.add_feed_btn.clicked.connect(self.add_feed)
+        self.edit_feed_btn.clicked.connect(self.edit_feed)  # Connect new button
         self.remove_feed_btn.clicked.connect(self.remove_feed)
         self.test_feed_btn.clicked.connect(self.test_feed)
         
         feed_controls_layout.addWidget(self.add_feed_btn)
+        feed_controls_layout.addWidget(self.edit_feed_btn)  # Add new button
         feed_controls_layout.addWidget(self.remove_feed_btn)
         feed_controls_layout.addWidget(self.test_feed_btn)
         feed_controls_layout.addStretch()
@@ -201,6 +240,12 @@ class MainWindow(QMainWindow):
             return
             
         self.feed_table.setRowCount(0)  # Clear existing rows
+        self.feed_table.setColumnCount(4)  # URL, Items Count, Status, Last Fetch Time
+        self.feed_table.setHorizontalHeaderLabels(["Feed URL", "Items", "Status", "Last Fetch Time"])
+        self.feed_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.feed_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.feed_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.feed_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         
         for row, feed_url in enumerate(self.current_task.rss_feeds):
             self.feed_table.insertRow(row)
@@ -208,6 +253,11 @@ class MainWindow(QMainWindow):
             # Feed URL
             url_item = QTableWidgetItem(feed_url)
             self.feed_table.setItem(row, 0, url_item)
+            
+            # Items count
+            items_count = self.current_task.get_feed_items_count(feed_url)
+            count_item = QTableWidgetItem(str(items_count))
+            self.feed_table.setItem(row, 1, count_item)
             
             # Status
             status_info = self.current_task.feeds_status.get(feed_url, {})
@@ -220,7 +270,7 @@ class MainWindow(QMainWindow):
             elif status == "fail":
                 status_item.setForeground(QColor("red"))
                 
-            self.feed_table.setItem(row, 1, status_item)
+            self.feed_table.setItem(row, 2, status_item)
             
             # Last fetch time
             last_fetch = status_info.get("last_fetch", "Never")
@@ -232,7 +282,7 @@ class MainWindow(QMainWindow):
                     last_fetch = "Invalid format"
                     
             time_item = QTableWidgetItem(last_fetch)
-            self.feed_table.setItem(row, 2, time_item)
+            self.feed_table.setItem(row, 3, time_item)
     
     def update_recipient_table(self):
         """Update the recipients table with current task's recipients and their status"""
@@ -278,12 +328,45 @@ class MainWindow(QMainWindow):
         if not self.current_task:
             return
             
-        feed_url, ok = QInputDialog.getText(self, "Add RSS Feed", 
-                                           "Enter RSS feed URL:")
-        if ok and feed_url:
-            self.current_task.rss_feeds.append(feed_url)
-            save_task(self.current_task)
-            self.update_feed_table()
+        dialog = FeedConfigDialog(self)
+        if dialog.exec():
+            feed_url = dialog.get_feed_url()
+            items_count = dialog.get_items_count()
+            
+            if feed_url:
+                self.current_task.rss_feeds.append(feed_url)
+                self.current_task.set_feed_items_count(feed_url, items_count)
+                save_task(self.current_task)
+                self.update_feed_table()
+    
+    def edit_feed(self):
+        """Edit the selected RSS feed settings"""
+        if not self.current_task:
+            return
+            
+        current_row = self.feed_table.currentRow()
+        if current_row >= 0:
+            feed_url = self.current_task.rss_feeds[current_row]
+            items_count = self.current_task.get_feed_items_count(feed_url)
+            
+            dialog = FeedConfigDialog(self, feed_url, items_count)
+            if dialog.exec():
+                new_url = dialog.get_feed_url()
+                new_count = dialog.get_items_count()
+                
+                # Keep feed status if URL doesn't change
+                if new_url != feed_url:
+                    self.current_task.rss_feeds[current_row] = new_url
+                    
+                    # If URL changed, update config with new URL
+                    if feed_url in self.current_task.feed_config:
+                        config = self.current_task.feed_config.pop(feed_url)
+                        self.current_task.feed_config[new_url] = config
+                
+                # Update items count
+                self.current_task.set_feed_items_count(new_url, new_count)
+                save_task(self.current_task)
+                self.update_feed_table()
     
     def remove_feed(self):
         """Remove selected RSS feed from the current task"""
@@ -434,6 +517,8 @@ class MainWindow(QMainWindow):
     
     def open_settings(self):
         """Open the settings window"""
-        # TODO: Import and show the settings window
-        QMessageBox.information(self, "Settings", 
-                               "Global settings window will be implemented soon.")
+        from gui.setting_window import SettingsWindow
+        settings_dialog = SettingsWindow(self)
+        settings_dialog.exec()
+        
+        # If we need to refresh anything after settings are updated, do it here

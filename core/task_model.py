@@ -4,7 +4,7 @@ class Task:
     """Represents an RSS aggregation task with its own feeds, schedule, and recipients"""
     
     def __init__(self, task_id=None, name="", rss_feeds=None, schedule=None, recipients=None, ai_settings=None,
-                 feeds_status=None, recipients_status=None, last_run=None):
+                 feeds_status=None, recipients_status=None, last_run=None, feed_config=None):
         self.task_id = task_id
         self.name = name
         self.rss_feeds = rss_feeds or []
@@ -16,6 +16,9 @@ class Task:
         self.feeds_status = feeds_status or {}  # Format: {"feed_url": {"status": "success/fail", "last_fetch": "timestamp"}}
         self.recipients_status = recipients_status or {}  # Format: {"email": {"status": "success/fail", "last_sent": "timestamp"}}
         self.last_run = last_run  # Last run timestamp for the entire task
+        
+        # Feed-specific configuration
+        self.feed_config = feed_config or {}  # Format: {"feed_url": {"items_count": 10}}
     
     def to_dict(self):
         """Convert task to dictionary for storage"""
@@ -28,7 +31,8 @@ class Task:
             "ai_settings": self.ai_settings,
             "feeds_status": self.feeds_status,
             "recipients_status": self.recipients_status,
-            "last_run": self.last_run
+            "last_run": self.last_run,
+            "feed_config": self.feed_config
         }
     
     @classmethod
@@ -43,7 +47,8 @@ class Task:
             ai_settings=data.get("ai_settings", {"summary_length": "medium"}),
             feeds_status=data.get("feeds_status", {}),
             recipients_status=data.get("recipients_status", {}),
-            last_run=data.get("last_run")
+            last_run=data.get("last_run"),
+            feed_config=data.get("feed_config", {})
         )
     
     def update_feed_status(self, feed_url, status="success"):
@@ -63,3 +68,15 @@ class Task:
     def update_task_run(self):
         """Update the last run timestamp for the task"""
         self.last_run = datetime.now().isoformat()
+    
+    def get_feed_items_count(self, feed_url):
+        """Get the number of items to fetch for a feed, default is 10"""
+        if feed_url in self.feed_config and "items_count" in self.feed_config[feed_url]:
+            return self.feed_config[feed_url]["items_count"]
+        return 10
+    
+    def set_feed_items_count(self, feed_url, count):
+        """Set the number of items to fetch for a feed"""
+        if feed_url not in self.feed_config:
+            self.feed_config[feed_url] = {}
+        self.feed_config[feed_url]["items_count"] = count
