@@ -83,9 +83,10 @@ def execute_task(task_id=None):
                     "items_count": items_count
                 })
             
-            # 获取用户兴趣标签
-            user_interests = config.get("global_settings", {}).get("user_interests", [])
-            logger.info(f"用户兴趣标签: {user_interests}")
+            # 获取用户兴趣标签 - 这里不再需要全局标签，因为我们会使用每个feed特定的标签
+            # 但我们仍需要知道全局配置用于某些默认值
+            global_interests = config.get("global_settings", {}).get("user_interests", [])
+            logger.info(f"全局兴趣标签: {global_interests} (仅用作默认值)")
             
             # 批量获取RSS feed
             logger.info(f"开始获取 {len(feed_configs)} 个RSS源")
@@ -112,7 +113,7 @@ def execute_task(task_id=None):
                     
                     for i, item in enumerate(items):
                         item["feed_url"] = feed_url
-                        item["feed_labels"] = feed_labels
+                        item["feed_labels"] = feed_labels  # 这些是该RSS源特有的标签
                         # 记录内容摘要
                         title = item.get("title", "无标题")
                         logger.info(f"内容 #{i+1}: {title[:50]}{'...' if len(title) > 50 else ''}")
@@ -123,9 +124,9 @@ def execute_task(task_id=None):
                 logger.warning(f"任务 {task.name} 未获取到任何内容，跳过过滤步骤")
                 continue
                 
-            # 应用内容过滤器
+            # 应用内容过滤器 - 传入所有内容但不再传入全局兴趣标签
             logger.info(f"开始过滤 {len(all_contents)} 条内容, 使用AI: {content_filter.ai_available}")
-            kept_contents, discarded_contents = content_filter.filter_content_batch(all_contents, user_interests)
+            kept_contents, discarded_contents = content_filter.filter_content_batch(all_contents)
             
             logger.info(f"任务 {task.name} 完成: 保留 {len(kept_contents)}/{len(all_contents)} 条内容, 丢弃 {len(discarded_contents)} 条")
             

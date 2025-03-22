@@ -66,26 +66,26 @@ class ContentFilter:
             logger.warning(f"无法连接到Ollama: {str(e)}")
             return False
     
-    def evaluate_content(self, content: Dict[str, Any], user_interests: List[str]) -> Dict[str, Any]:
+    def evaluate_content(self, content: Dict[str, Any]) -> Dict[str, Any]:
         """评估新闻内容，检查是否符合用户兴趣，并评价重要性、时效性、趣味性
         
         Args:
-            content: 包含新闻内容的字典
-            user_interests: 用户兴趣标签列表
+            content: 包含新闻内容的字典，包括feed_labels表示该RSS源特有的标签
             
         Returns:
             带有评估结果的原始内容字典
         """
         title = content.get("title", "无标题")
-        logger.info(f"评估内容: {title[:50]}{'...' if len(title) > 50 else ''}")
+        feed_labels = content.get("feed_labels", [])
+        logger.info(f"评估内容: {title[:50]}{'...' if len(title) > 50 else ''}, 源标签: {feed_labels}")
         
         # 如果过多连接错误或AI不可用，使用基于规则的方法
         if not self.ai_available or self.connection_errors >= self.ai_error_threshold:
             logger.info(f"使用规则方法评估: AI可用={self.ai_available}, 连接错误={self.connection_errors}")
-            return self._evaluate_content_rule_based(content, user_interests)
+            return self._evaluate_content_rule_based(content)
         
         # 构建提示词，要求AI评估内容
-        prompt = self._build_evaluation_prompt(content, user_interests)
+        prompt = self._build_evaluation_prompt(content)
         
         try:
             # 根据提供者调用AI
@@ -124,65 +124,48 @@ class ContentFilter:
                 # 评估失败，增加错误计数并使用规则方法
                 self.connection_errors += 1
                 logger.warning(f"AI评估失败 ({self.connection_errors}/{self.ai_error_threshold})，回退到规则方法")
-                return self._evaluate_content_rule_based(content, user_interests)
+                return self._evaluate_content_rule_based(content)
         except Exception as e:
             # 出现异常，增加错误计数并使用规则方法
             self.connection_errors += 1
             logger.error(f"评估内容时出错: {str(e)}，回退到规则方法 ({self.connection_errors}/{self.ai_error_threshold})")
-            return self._evaluate_content_rule_based(content, user_interests)
+            return self._evaluate_content_rule_based(content)
         
         return content
     
-    def _evaluate_content_rule_based(self, content: Dict[str, Any], user_interests: List[str]) -> Dict[str, Any]:
+    def _evaluate_content_rule_based(self, content: Dict[str, Any]) -> Dict[str, Any]:
         """使用基于规则的方法评估内容
         
         Args:
-            content: 新闻内容
-            user_interests: 用户兴趣标签
+            content: 新闻内容，包括feed_labels表示该RSS源特有的标签
             
         Returns:
             带有评估结果的内容字典
         """
         title = content.get("title", "").lower()
         summary = content.get("summary", "").lower()
+        # 获取当前条目所属RSS源配置的特定标签
         feed_labels = content.get("feed_labels", [])
         
         logger.info(f"规则评估 - 标题: {title[:50]}{'...' if len(title) > 50 else ''}")
-        logger.info(f"规则评估 - 标签: {feed_labels}")
+        logger.info(f"规则评估 - 源标签: {feed_labels}")
         
-        # 检查标题和摘要中是否包含用户兴趣标签
+        # 检查标题和摘要中是否包含RSS源特定的标签
         interest_match = False
         matched_tags = []
         
-        # 检查内容来源标签是否匹配用户兴趣
-        for label in feed_labels:
-            if label.lower() in [tag.lower() for tag in user_interests]:
-                logger.info(f"标签匹配: {label}")
-                interest_match = True
-                matched_tags.append(label)
-        
-        # 检查标题和摘要中是否包含兴趣关键词
-        for tag in user_interests:
-            tag_lower = tag.lower()
-            if tag_lower in title:
-                logger.info(f"标题匹配关键词: {tag}")
-                interest_match = True
-                if tag not in matched_tags:
-                    matched_tags.append(tag)
-            elif tag_lower in summary:
-                logger.info(f"摘要匹配关键词: {tag}")
-                interest_match = True
-                if tag not in matched_tags:
-                    matched_tags.append(tag)
-        
-        logger.info(f"规则评估结果: 兴趣匹配={interest_match}, 匹配标签={matched_tags}")
+        # 内容直接继承了feed的标签，我们认为它们是匹配的
+        if feed_labels:
+            interest_match = True
+            matched_tags = feed_labels.copy()
+            logger.info(f"内容匹配源标签: {matched_tags}")
         
         # 构建评估结果
         evaluation_result = {
             "interest_match": {
                 "is_match": interest_match,
                 "matched_tags": matched_tags,
-                "explanation": "通过规则检测匹配用户兴趣标签" if interest_match else "不匹配任何用户兴趣标签"
+                "explanation": "内容来自标记了这些标签的RSS源" if interest_match else "RSS源没有配置兴趣标签"
             },
             "importance": {
                 "rating": RatingLevel.MEDIUM,  # 默认重要性为中等
@@ -214,12 +197,11 @@ class ContentFilter:
         
         return content
     
-    def _build_evaluation_prompt(self, content: Dict[str, Any], user_interests: List[str]) -> str:
+    def _build_evaluation_prompt(self, content: Dict[str, Any]) -> str:
         """构建用于评估内容的提示词
         
         Args:
-            content: 新闻内容
-            user_interests: 用户兴趣标签
+            content: 新闻内容，包括feed_labels表示该RSS源特有的标签
             
         Returns:
             格式化的提示词
@@ -228,6 +210,7 @@ class ContentFilter:
         title = content.get("title", "")
         summary = content.get("summary", "")
         full_content = content.get("content", "")
+        feed_labels = content.get("feed_labels", [])
         
         # 如果摘要或全文很长，进行截断
         if len(summary) > 1000:
@@ -235,8 +218,8 @@ class ContentFilter:
         if len(full_content) > 3000:
             full_content = full_content[:3000] + "..."
         
-        # 将兴趣标签格式化为字符串
-        interests_str = ", ".join([f'"{tag}"' for tag in user_interests])
+        # 将兴趣标签格式化为字符串 - 使用RSS源特定的标签
+        interests_str = ", ".join([f'"{tag}"' for tag in feed_labels])
         
         return f"""请分析以下新闻内容，并根据给定标准进行评估：
 
@@ -245,11 +228,11 @@ class ContentFilter:
 摘要：{summary}
 全文：{full_content}
 
-## 用户兴趣标签
+## 该RSS源关注的标签
 {interests_str}
 
 ## 评估要求
-1. 兴趣匹配：这条新闻属于用户兴趣标签中的哪一种？如果有，请指明具体标签；如果不属于任何用户兴趣标签，请说明。
+1. 兴趣匹配：这条新闻是否符合该RSS源关注的标签？如果有，请指明具体匹配的标签；如果不符合任何标签，请说明。
 2. 重要性：这条新闻的重要性如何？（极低、低、中、高、极高）
 3. 时效性：这条新闻的时效性如何？（极低、低、中、高、极高）
 4. 趣味性：这条新闻的趣味性如何？（极低、低、中、高、极高）
@@ -427,12 +410,11 @@ class ContentFilter:
         logger.info("保留原因：通过所有筛选条件")
         return True
         
-    def filter_content_batch(self, contents: List[Dict[str, Any]], user_interests: List[str]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    def filter_content_batch(self, contents: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """批量评估和过滤新闻内容
         
         Args:
-            contents: 新闻内容列表
-            user_interests: 用户兴趣标签列表
+            contents: 新闻内容列表，每个内容包括feed_labels表示该RSS源特有的标签
             
         Returns:
             保留的内容列表和丢弃的内容列表
@@ -445,16 +427,17 @@ class ContentFilter:
             logger.warning("无内容需要过滤")
             return kept_contents, discarded_contents
             
-        logger.info(f"开始过滤 {len(contents)} 条内容, 用户兴趣: {user_interests}")
+        logger.info(f"开始过滤 {len(contents)} 条内容，使用各个内容所属的源标签")
         
         for index, content in enumerate(contents):
             try:
                 # 每条内容都显示进度
                 title = content.get("title", "无标题")
-                logger.info(f"过滤进度: {index+1}/{len(contents)} - {title[:30]}{'...' if len(title) > 30 else ''}")
+                feed_labels = content.get("feed_labels", [])
+                logger.info(f"过滤进度: {index+1}/{len(contents)} - {title[:30]}{'...' if len(title) > 30 else ''} (标签: {feed_labels})")
                 
-                # 评估每个内容
-                evaluated_content = self.evaluate_content(content, user_interests)
+                # 评估每个内容 - 不再传入全局兴趣标签，而是使用内容自带的feed_labels
+                evaluated_content = self.evaluate_content(content)
                 
                 # 根据评估结果分类
                 if evaluated_content.get("keep", False):
