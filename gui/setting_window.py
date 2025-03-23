@@ -1,11 +1,12 @@
 from PyQt6.QtWidgets import (QDialog, QTabWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                             QLineEdit, QCheckBox, QComboBox, QPushButton, QFormLayout, 
-                            QGroupBox, QWidget, QMessageBox, QSpinBox)
+                            QGroupBox, QWidget, QMessageBox, QSpinBox, QStackedWidget)
 from PyQt6.QtCore import Qt
 from core.config_manager import load_config, save_config
 import requests
 import json
 from gui.tag_editor import TagEditor  # 导入标签编辑器
+from core.email_sender import EmailSender
 
 class SettingsWindow(QDialog):
     def __init__(self, parent=None):
@@ -69,9 +70,11 @@ class SettingsWindow(QDialog):
         
         # Create widgets for email settings
         self.smtp_server = QLineEdit(email_settings.get("smtp_server", ""))
+        
         self.smtp_port = QSpinBox()
         self.smtp_port.setRange(1, 65535)
         self.smtp_port.setValue(email_settings.get("smtp_port", 587))
+        
         self.smtp_security = QComboBox()
         self.smtp_security.addItems(["SSL/TLS", "STARTTLS", "None"])
         security_index = {"SSL/TLS": 0, "STARTTLS": 1, "None": 2}.get(
@@ -82,9 +85,9 @@ class SettingsWindow(QDialog):
         smtp_form.addRow("Port:", self.smtp_port)
         smtp_form.addRow("Security:", self.smtp_security)
         
-        # Login Group
-        login_group = QGroupBox("Login Settings")
-        login_form = QFormLayout(login_group)
+        # Authentication Group
+        auth_group = QGroupBox("Authentication Settings")
+        auth_form = QFormLayout(auth_group)
         
         self.sender_email = QLineEdit(email_settings.get("sender_email", ""))
         self.email_password = QLineEdit(email_settings.get("email_password", ""))
@@ -92,15 +95,127 @@ class SettingsWindow(QDialog):
         self.remember_password = QCheckBox("Remember password")
         self.remember_password.setChecked(email_settings.get("remember_password", False))
         
-        login_form.addRow("Sender Email:", self.sender_email)
-        login_form.addRow("Password:", self.email_password)
-        login_form.addRow("", self.remember_password)
+        auth_form.addRow("Sender Email:", self.sender_email)
+        auth_form.addRow("Password:", self.email_password)
+        auth_form.addRow("", self.remember_password)
         
         email_layout.addWidget(smtp_group)
-        email_layout.addWidget(login_group)
+        email_layout.addWidget(auth_group)
         email_layout.addStretch()
         
         self.tabs.addTab(email_tab, "Email")
+
+    def on_smtp_server_changed(self, server):
+        """Handle SMTP server text change to auto-detect OAuth requirements"""
+        server = server.lower()
+        
+        # Auto-select OAuth for Microsoft servers
+        if "office365" in server or "outlook" in server:
+            self.auth_method.setCurrentText("OAuth 2.0")
+            # 更新为更强硬的警告，表明没有其他选择
+            QMessageBox.warning(self, "Microsoft Authentication", 
+                "Microsoft已完全禁用密码认证！\n\n"
+                "对于Office 365或Outlook邮箱，唯一可用的选项是OAuth 2.0认证。\n\n"
+                "请按照'How to get OAuth credentials'按钮的指引完成配置。")
+
+    def on_auth_method_changed(self, index):
+        """Switch between authentication methods"""
+        self.auth_stack.setCurrentIndex(index)
+        
+        # Sync email addresses between the two input fields
+        if index == 0:  # Basic -> OAuth
+            self.oauth_sender_email.setText(self.sender_email.text())
+        else:  # OAuth -> Basic
+            self.sender_email.setText(self.oauth_sender_email.text())
+    
+    def show_oauth_help(self):
+        """Show help dialog for obtaining OAuth credentials"""
+        msg = QMessageBox(self)
+        msg.setWindowTitle("OAuth Setup Instructions")
+        msg.setIcon(QMessageBox.Icon.Information)
+        
+        help_text = """
+<h3>How to set up OAuth 2.0 for Microsoft Email</h3>
+
+<ol>
+<li><b>Register an application in Azure Portal:</b>
+    <ul>
+    <li>Go to <a href="https://portal.azure.com/">Azure Portal</a></li>
+    <li>Navigate to "Azure Active Directory" > "App registrations" > "New registration"</li>
+    <li>Name your application (e.g., "NewsDigest Email")</li>
+    <li>For "Supported account types" select "Accounts in any organizational directory and personal Microsoft accounts"</li>
+    <li>Leave Redirect URI empty and click "Register"</li>
+    </ul>
+</li>
+
+<li><b>Get the Application (client) ID:</b>
+    <ul>
+    <li>After registration, copy the "Application (client) ID" from the overview page</li>
+    <li>This is your <b>Client ID</b></li>
+    </ul>
+</li>
+
+<li><b>Create a client secret:</b>
+    <ul>
+    <li>Go to "Certificates & secrets" > "Client secrets" > "New client secret"</li>
+    <li>Add a description and select expiration period</li>
+    <li>Click "Add" and immediately copy the secret value</li>
+    <li>This is your <b>Client Secret</b></li>
+    </ul>
+</li>
+
+<li><b>Configure API permissions:</b>
+    <ul>
+    <li>Go to "API permissions" > "Add a permission"</li>
+    <li>Select "Microsoft Graph" > "Application permissions"</li>
+    <li>Search for and add: "SMTP.Send"</li>
+    <li>Click "Grant admin consent"</li>
+    </ul>
+</li>
+
+<li><b>Get Tenant ID (optional):</b>
+    <ul>
+    <li>For organizational accounts, copy the "Directory (tenant) ID" from the overview page</li>
+    <li>For personal accounts, use "common" as the Tenant ID</li>
+    </ul>
+</li>
+</ol>
+
+<p>After completing these steps, enter the values in the corresponding fields.</p>
+"""
+        
+        msg.setText("Setting up OAuth 2.0 for Microsoft Email")
+        msg.setInformativeText(help_text)
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg.exec()
+
+    def show_app_password_help(self):
+        """显示密码认证已被禁用的帮助对话框"""
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Microsoft Authentication")
+        msg.setIcon(QMessageBox.Icon.Warning)
+        
+        help_text = """
+<h3>Microsoft已禁用密码认证</h3>
+
+<p>Microsoft已禁用所有形式的密码认证(包括常规密码和应用密码)。</p>
+
+<p>对于Microsoft账户(Office 365或Outlook)，<b>唯一可用的选项是OAuth 2.0认证</b>。</p>
+
+<p>请切换到OAuth 2.0认证方式并配置以下必要信息：</p>
+<ul>
+<li>Client ID (从Azure应用注册获取)</li>
+<li>Client Secret (从Azure应用注册获取)</li>
+<li>租户ID (通常使用您的实际租户ID)</li>
+</ul>
+
+<p>点击"How to get OAuth credentials"按钮获取详细设置步骤。</p>
+"""
+        
+        msg.setText("Microsoft已禁用密码认证")
+        msg.setInformativeText(help_text)
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg.exec()
 
     def create_ai_tab(self):
         """Create the AI settings tab"""
@@ -295,12 +410,14 @@ class SettingsWindow(QDialog):
             "smtp_port": self.smtp_port.value(),
             "smtp_security": self.smtp_security.currentText(),
             "sender_email": self.sender_email.text(),
-            "remember_password": self.remember_password.isChecked(),
         }
         
         # Only save password if remember password is checked
         if self.remember_password.isChecked():
             email_settings["email_password"] = self.email_password.text()
+            email_settings["remember_password"] = True
+        else:
+            email_settings["remember_password"] = False
         
         # AI settings
         ai_provider = "ollama" if self.ai_provider.currentIndex() == 0 else "openai"
@@ -350,21 +467,33 @@ class SettingsWindow(QDialog):
         
         if not server or not email or not password:
             QMessageBox.warning(self, "Incomplete Information", 
-                             "Please fill in all email server details before testing.")
+                             "Please fill in all email settings (server, email, and password).")
             return
         
-        # Display a message that in a real app, this would send a test email
-        QMessageBox.information(self, "Test Email", 
-                             f"This would test sending an email using:\nServer: {server}:{port}\n"
-                             f"Email: {email}\nSecurity: {security}")
+        # Create temp config
+        temp_config = {
+            "global_settings": {
+                "email_settings": {
+                    "smtp_server": server,
+                    "smtp_port": port,
+                    "smtp_security": security,
+                    "sender_email": email,
+                    "email_password": password
+                }
+            }
+        }
         
-        # In a real implementation, you would use something like:
-        # try:
-        #     # Code to actually send a test email
-        #     success = send_test_email(server, port, security, email, password)
-        #     if success:
-        #         QMessageBox.information(self, "Success", "Test email sent successfully!")
-        #     else:
-        #         QMessageBox.critical(self, "Failed", "Failed to send test email.")
-        # except Exception as e:
-        #     QMessageBox.critical(self, "Error", f"Error sending test email: {str(e)}")
+        # 实例化邮件发送器
+        email_sender = EmailSender(temp_config)
+        
+        # 显示正在发送的提示
+        QMessageBox.information(self, "Sending Test", 
+                             f"Sending test email to: {email}\nPlease wait...")
+        
+        # 发送测试邮件
+        success, message = email_sender.send_test_email(email)
+        
+        if success:
+            QMessageBox.information(self, "Success", "Test email sent successfully!")
+        else:
+            QMessageBox.critical(self, "Failed", f"Failed to send test email.\nError: {message}")

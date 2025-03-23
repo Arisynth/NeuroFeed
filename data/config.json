@@ -54,11 +54,12 @@
     ],
     "global_settings": {
         "email_settings": {
-            "smtp_server": "",
-            "smtp_port": 587,
-            "smtp_security": "STARTTLS",
-            "sender_email": "",
-            "remember_password": false
+            "smtp_server": "smtp.163.com",
+            "smtp_port": 465,
+            "smtp_security": "SSL/TLS",
+            "sender_email": "neurofeed@163.com",
+            "email_password": "CGsMf5yQmJVEcXtm",
+            "remember_password": true
         },
         "ai_settings": {
             "provider": "ollama",

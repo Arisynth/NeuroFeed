@@ -8,6 +8,7 @@ from core.rss_parser import RssParser
 from ai_processor.filter import ContentFilter
 from ai_processor.summarizer import NewsSummarizer
 from typing import Dict, List, Any
+from core.email_sender import EmailSender, EmailSendError
 
 # Fix the logging format string issue
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -252,6 +253,40 @@ def execute_task(task_id=None):
                 except Exception as e:
                     logger.error(f"生成新闻简报失败: {str(e)}")
                     logger.error("将使用未生成简报的原始内容继续")
+            
+            # 如果有收件人，则发送邮件
+            if kept_contents and task.recipients:
+                logger.info(f"\n============ 开始发送邮件 ============")
+                logger.info(f"任务: {task.name}")
+                logger.info(f"收件人数量: {len(task.recipients)}")
+                
+                try:
+                    # 创建邮件发送器
+                    email_sender = EmailSender(config)
+                    
+                    # 发送简报
+                    results = email_sender.send_digest(task.name, kept_contents, task.recipients)
+                    
+                    # 更新收件人状态
+                    for recipient, result in results.items():
+                        status = result.get("status", "fail")
+                        task.update_recipient_status(recipient, status)
+                    
+                    # 记录邮件发送结果
+                    success_count = sum(1 for r in results.values() if r.get("status") == "success")
+                    logger.info(f"邮件发送完成: {success_count}/{len(task.recipients)}成功")
+                    
+                    # 如果全部成功，更新任务状态
+                    if success_count == len(task.recipients):
+                        logger.info("所有邮件发送成功")
+                    else:
+                        logger.warning(f"部分邮件发送失败: {len(task.recipients) - success_count} 个失败")
+                        for recipient, result in results.items():
+                            if result.get("status") != "success":
+                                error = result.get("error", "未知错误")
+                                logger.warning(f"  - {recipient}: {error}")
+                except Exception as e:
+                    logger.error(f"邮件发送过程中出错: {str(e)}")
             
             # 更新任务的last_run时间
             task.update_task_run()
