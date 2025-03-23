@@ -1,7 +1,7 @@
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from ai_processor.ai_utils import AiService
+from ai_processor.ai_utils import AiService, AiException
 
 # 配置日志
 logger = logging.getLogger("summarizer")
@@ -14,8 +14,12 @@ class NewsSummarizer:
         
         Args:
             config: 包含AI设置的配置字典
+            
+        Raises:
+            AiException: 当AI服务不可用时
         """
         self.config = config or {}
+        # 初始化AI服务，如果不可用会抛出异常
         self.ai_service = AiService(config)
         
         # 加载简报生成配置
@@ -24,9 +28,6 @@ class NewsSummarizer:
         
         # 简报风格设置
         self.brief_style = self.summarize_settings.get("style", "informative")
-        
-        # 是否使用AI，如果AI不可用，则使用简单摘要
-        self.use_ai = self.ai_service.ai_available
     
     def generate_summaries(self, contents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """为一组新闻内容生成简报概要
@@ -36,6 +37,9 @@ class NewsSummarizer:
             
         Returns:
             添加了简报概要的内容列表
+            
+        Raises:
+            AiException: 当批处理中出现致命错误时
         """
         if not contents:
             logger.warning("没有内容需要生成简报")
@@ -55,9 +59,13 @@ class NewsSummarizer:
                 
             except Exception as e:
                 logger.error(f"生成简报时出错: {str(e)}")
-                # 添加简单摘要
-                content["news_brief"] = self._generate_simple_summary(content)
-                content["summary_method"] = "simple"
+                # 如果是连续的多个错误，可能是AI服务问题，应该中断流程
+                if index > 0 and index % 3 == 0 and len(summarized_contents) == 0:
+                    raise AiException(f"连续多条内容生成简报失败，可能是AI服务存在问题: {str(e)}")
+                # 将错误信息添加到内容中
+                content["error"] = str(e)
+                content["news_brief"] = f"[生成简报失败: {str(e)}]"
+                content["summary_method"] = "error"
                 summarized_contents.append(content)
         
         logger.info(f"简报生成完成: {len(summarized_contents)}/{len(contents)} 成功")
@@ -71,44 +79,34 @@ class NewsSummarizer:
             
         Returns:
             添加了简报概要的内容
+            
+        Raises:
+            AiException: 当简报生成失败时
         """
         title = content.get("title", "")
-        original_summary = content.get("summary", "")
         article_content = content.get("content", "")
         
         # 记录原内容长度
         original_content_length = len(article_content)
         logger.info(f"原始内容长度: {original_content_length} 字符")
         
-        # 如果文章内容为空或太短，使用原始摘要
+        # 如果文章内容为空或太短，报错
         if not article_content or len(article_content) < 100:
-            logger.info("内容太短，使用原始摘要")
-            content["news_brief"] = original_summary
-            content["summary_method"] = "original"
-            return content
-            
-        # 如果AI不可用，使用简单摘要
-        if not self.use_ai:
-            logger.info("AI不可用，使用简单摘要")
-            content["news_brief"] = self._generate_simple_summary(content)
-            content["summary_method"] = "simple"
-            return content
+            raise AiException("内容太短，无法生成有意义的简报")
         
         # 使用AI生成简报
         news_brief = self._generate_ai_summary(content)
         
-        # 如果AI简报生成成功，使用AI简报，否则使用简单摘要
-        if news_brief:
-            logger.info(f"AI简报生成成功，长度: {len(news_brief)} 字符")
-            content["news_brief"] = news_brief
-            content["summary_method"] = "ai"
-            
-            # 记录完整的简报内容
-            logger.info(f"生成的简报内容: \n{news_brief}")
-        else:
-            logger.warning("AI简报生成失败，使用简单摘要")
-            content["news_brief"] = self._generate_simple_summary(content)
-            content["summary_method"] = "simple"
+        # 检查简报是否生成成功
+        if not news_brief:
+            raise AiException("AI未能生成有效简报")
+        
+        logger.info(f"AI简报生成成功，长度: {len(news_brief)} 字符")
+        content["news_brief"] = news_brief
+        content["summary_method"] = "ai"
+        
+        # 记录完整的简报内容
+        logger.info(f"生成的简报内容: \n{news_brief}")
         
         return content
     
@@ -120,6 +118,9 @@ class NewsSummarizer:
             
         Returns:
             生成的简报文本
+            
+        Raises:
+            AiException: 当简报生成失败时
         """
         title = content.get("title", "")
         article_content = content.get("content", "")
@@ -130,12 +131,13 @@ class NewsSummarizer:
         # 调用AI
         response = self.ai_service.call_ai(prompt, max_retries=2)
         
-        # 如果AI响应为空，返回空字符串
-        if not response:
-            return ""
-            
         # 处理AI响应，移除可能的引号或多余格式
         brief = response.strip().strip('"\'')
+        
+        # 验证简报内容
+        if len(brief) < 50:  # 简报过短表示可能有问题
+            raise AiException(f"生成的简报内容过短 ({len(brief)} 字符)")
+            
         return brief
     
     def _build_summary_prompt(self, title: str, content: str) -> str:
@@ -178,39 +180,3 @@ class NewsSummarizer:
 
 请直接返回简报文本，不要加引号或前缀说明。
 """
-    
-    def _generate_simple_summary(self, content: Dict[str, Any]) -> str:
-        """生成简单摘要（非AI）
-        
-        Args:
-            content: 新闻内容
-            
-        Returns:
-            简单摘要文本
-        """
-        # 如果有原始摘要，优先使用
-        if content.get("summary"):
-            return content["summary"]
-            
-        # 如果没有摘要，使用内容的前N个字符
-        article_content = content.get("content", "")
-        if article_content:
-            # 清理内容中的HTML标签（简单实现）
-            import re
-            cleaned_content = re.sub(r'<[^>]+>', ' ', article_content)
-            cleaned_content = re.sub(r'\s+', ' ', cleaned_content).strip()
-            
-            # 找到完整句子的结束位置
-            last_period = cleaned_content[:500].rfind('。')
-            last_comma = cleaned_content[:500].rfind('，')
-            cut_point = max(last_period, last_comma)
-            
-            if cut_point > 100:  # 确保有合理的长度
-                return cleaned_content[:cut_point+1]
-            else:
-                return cleaned_content[:300] + "..."
-                
-            return summary
-        
-        # 如果没有内容也没有摘要，返回标题
-        return content.get("title", "无简报可用")

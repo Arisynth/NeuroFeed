@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict, Any, Optional, Tuple
 from enum import Enum
 from datetime import datetime
-from ai_processor.ai_utils import AiService
+from ai_processor.ai_utils import AiService, AiException
 
 # 配置日志
 logger = logging.getLogger("content_filter")
@@ -24,19 +24,31 @@ class ContentFilter:
         
         Args:
             config: 包含AI设置的配置字典
+            
+        Raises:
+            AiException: 当AI服务不可用时
         """
         self.config = config or {}
-        # 使用共享的AI服务
+        # 使用共享的AI服务，如果不可用会抛出异常
         self.ai_service = AiService(config)
         
-        # 获取AI服务的可用状态和提供商
-        self.ai_available = self.ai_service.ai_available
+        # 获取AI服务的提供商和模型信息
         self.provider = self.ai_service.provider
         self.ollama_model = getattr(self.ai_service, 'ollama_model', '')
         self.openai_model = getattr(self.ai_service, 'openai_model', '')
     
     def evaluate_content(self, content: Dict[str, Any]) -> Dict[str, Any]:
-        """评估新闻内容，检查是否符合用户兴趣，并评价重要性、时效性、趣味性"""
+        """评估新闻内容，检查是否符合用户兴趣，并评价重要性、时效性、趣味性
+        
+        Args:
+            content: 新闻内容
+            
+        Returns:
+            评估后的内容，包含评估结果
+            
+        Raises:
+            AiException: 当AI评估失败时
+        """
         title = content.get("title", "无标题")
         summary = content.get("summary", "")
         feed_labels = content.get("feed_labels", [])
@@ -65,113 +77,32 @@ class ContentFilter:
             except (ValueError, TypeError):
                 logger.info("无法解析发布时间格式")
         
-        # 如果AI不可用，使用基于规则的方法
-        if not self.ai_available:
-            logger.info(f"AI评估不可用: AI可用={self.ai_available}")
-            logger.info(f"将使用基于规则的评估方法")
-            return self._evaluate_content_rule_based(content)
-        
         # 构建提示词，要求AI评估内容
         prompt = self._build_evaluation_prompt(content)
         logger.info(f"向AI发送的提示词长度: {len(prompt)} 字符")
         logger.info(f"提示词前100字符: {prompt[:100]}...")
         
-        try:
-            # 调用AI服务
-            logger.info(f"使用{self.provider}评估内容, 模型: {self.ollama_model or self.openai_model}")
-            evaluation = self.ai_service.call_ai(prompt)
-            
-            # 如果评估成功
-            if evaluation:
-                logger.info(f"AI响应长度: {len(evaluation)} 字符")
-                # 解析评估结果
-                evaluation_result = self._parse_evaluation(evaluation)
-                
-                # 记录评估结果
-                is_match = evaluation_result["interest_match"]["is_match"]
-                matched_tags = evaluation_result["interest_match"]["matched_tags"]
-                importance = evaluation_result["importance"]["rating"]
-                timeliness = evaluation_result["timeliness"]["rating"]
-                interest_level = evaluation_result["interest_level"]["rating"]
-                
-                logger.info(f"评估结果: 兴趣匹配={is_match} {matched_tags}, 重要性={importance}, 时效性={timeliness}, 趣味性={interest_level}")
-                
-                # 更新并返回内容字典
-                content.update({
-                    "evaluation": evaluation_result,
-                    "keep": self._should_keep_content(evaluation_result)
-                })
-            else:
-                # 评估失败，使用规则方法
-                logger.warning(f"AI评估失败，回退到规则方法")
-                return self._evaluate_content_rule_based(content)
-        except Exception as e:
-            # 出现异常，使用规则方法
-            logger.error(f"评估内容时出错: {str(e)}，回退到规则方法")
-            return self._evaluate_content_rule_based(content)
+        # 调用AI服务，如果失败将抛出异常
+        logger.info(f"使用{self.provider}评估内容, 模型: {self.ollama_model or self.openai_model}")
+        evaluation = self.ai_service.call_ai(prompt)
         
-        return content
-    
-    def _evaluate_content_rule_based(self, content: Dict[str, Any]) -> Dict[str, Any]:
-        """使用基于规则的方法评估内容
+        logger.info(f"AI响应长度: {len(evaluation)} 字符")
+        # 解析评估结果，如果失败将抛出异常
+        evaluation_result = self._parse_evaluation(evaluation)
         
-        Args:
-            content: 新闻内容，包括feed_labels表示该RSS源特有的标签
-            
-        Returns:
-            带有评估结果的内容字典
-        """
-        title = content.get("title", "").lower()
-        summary = content.get("summary", "").lower()
-        # 获取当前条目所属RSS源配置的特定标签
-        feed_labels = content.get("feed_labels", [])
+        # 记录评估结果
+        is_match = evaluation_result["interest_match"]["is_match"]
+        matched_tags = evaluation_result["interest_match"]["matched_tags"]
+        importance = evaluation_result["importance"]["rating"]
+        timeliness = evaluation_result["timeliness"]["rating"]
+        interest_level = evaluation_result["interest_level"]["rating"]
         
-        logger.info(f"规则评估 - 标题: {title[:50]}{'...' if len(title) > 50 else ''}")
-        logger.info(f"规则评估 - 源标签: {feed_labels}")
+        logger.info(f"评估结果: 兴趣匹配={is_match} {matched_tags}, 重要性={importance}, 时效性={timeliness}, 趣味性={interest_level}")
         
-        # 检查标题和摘要中是否包含RSS源特定的标签
-        interest_match = False
-        matched_tags = []
-        
-        # 内容直接继承了feed的标签，我们认为它们是匹配的
-        if feed_labels:
-            interest_match = True
-            matched_tags = feed_labels.copy()
-            logger.info(f"内容匹配源标签: {matched_tags}")
-        
-        # 构建评估结果
-        evaluation_result = {
-            "interest_match": {
-                "is_match": interest_match,
-                "matched_tags": matched_tags,
-                "explanation": "内容来自标记了这些标签的RSS源" if interest_match else "RSS源没有配置兴趣标签"
-            },
-            "importance": {
-                "rating": RatingLevel.MEDIUM,  # 默认重要性为中等
-                "explanation": "使用规则方法无法准确评估重要性"
-            },
-            "timeliness": {
-                "rating": RatingLevel.HIGH,  # 默认假设RSS feed内容时效性高
-                "explanation": "RSS feed通常包含最新内容"
-            },
-            "interest_level": {
-                "rating": RatingLevel.MEDIUM,  # 默认趣味性为中等
-                "explanation": "使用规则方法无法准确评估趣味性"
-            }
-        }
-        
-        # 如果匹配兴趣标签，提高重要性和趣味性评级
-        if interest_match:
-            evaluation_result["importance"]["rating"] = RatingLevel.HIGH
-            evaluation_result["interest_level"]["rating"] = RatingLevel.HIGH
-        
-        # 更新内容字典
-        keep_decision = self._should_keep_content(evaluation_result)
-        logger.info(f"规则过滤决定: {'保留' if keep_decision else '丢弃'}")
-        
+        # 更新并返回内容字典
         content.update({
             "evaluation": evaluation_result,
-            "keep": keep_decision
+            "keep": self._should_keep_content(evaluation_result)
         })
         
         return content
@@ -243,38 +174,27 @@ class ContentFilter:
 """
     
     def _parse_evaluation(self, evaluation_text: str) -> Dict[str, Any]:
-        """解析AI评估结果"""
+        """解析AI评估结果
+        
+        Args:
+            evaluation_text: AI响应文本
+            
+        Returns:
+            解析后的评估结果
+            
+        Raises:
+            AiException: 当评估结果解析失败时
+        """
         # 记录AI的完整响应
         logger.info(f"\n============ AI响应内容 ============")
         logger.info(f"AI响应原文 ({len(evaluation_text)} 字符):\n{evaluation_text}\n")
         
-        # 使用共享的AI服务解析JSON
+        # 使用共享的AI服务解析JSON，如果失败将抛出异常
         result = self.ai_service.parse_json_response(evaluation_text)
         
-        # 如果解析失败，返回默认结果
-        if not result or not all(k in result for k in ["interest_match", "importance", "timeliness", "interest_level"]):
-            logger.warning("AI响应缺少必要的评估字段或解析失败")
-            # 创建默认结果
-            default_result = {
-                "interest_match": {
-                    "is_match": False,
-                    "matched_tags": [],
-                    "explanation": "无法解析AI评估结果"
-                },
-                "importance": {
-                    "rating": RatingLevel.UNKNOWN,
-                    "explanation": "无法解析AI评估结果"
-                },
-                "timeliness": {
-                    "rating": RatingLevel.UNKNOWN,
-                    "explanation": "无法解析AI评估结果"
-                },
-                "interest_level": {
-                    "rating": RatingLevel.UNKNOWN,
-                    "explanation": "无法解析AI评估结果"
-                }
-            }
-            return default_result
+        # 验证结果结构
+        if not all(k in result for k in ["interest_match", "importance", "timeliness", "interest_level"]):
+            raise AiException("AI响应缺少必要的评估字段，请检查AI响应格式")
         
         # 记录解析结果
         is_match = result["interest_match"]["is_match"]
@@ -361,6 +281,9 @@ class ContentFilter:
             
         Returns:
             保留的内容列表和丢弃的内容列表
+            
+        Raises:
+            AiException: 当批量处理中出现致命错误时
         """
         kept_contents = []
         discarded_contents = []
@@ -379,7 +302,7 @@ class ContentFilter:
                 feed_labels = content.get("feed_labels", [])
                 logger.info(f"过滤进度: {index+1}/{len(contents)} - {title[:30]}{'...' if len(title) > 30 else ''} (标签: {feed_labels})")
                 
-                # 评估每个内容 - 不再传入全局兴趣标签，而是使用内容自带的feed_labels
+                # 评估每个内容
                 evaluated_content = self.evaluate_content(content)
                 
                 # 根据评估结果分类
@@ -390,10 +313,12 @@ class ContentFilter:
                     logger.info(f"决定: 丢弃内容 #{index+1}")
                     discarded_contents.append(evaluated_content)
             except Exception as e:
-                import traceback
                 logger.error(f"过滤内容 #{index+1} 时出错: {str(e)}")
-                logger.error(f"详细错误信息: {traceback.format_exc()}")
-                # 出错时默认丢弃内容
+                # 如果是连续的多个错误，可能是AI服务问题，应该中断流程
+                if index > 0 and index % 3 == 0 and len(kept_contents) == 0:
+                    raise AiException(f"连续多条内容评估失败，可能是AI服务存在问题: {str(e)}")
+                # 出错时将内容标记为丢弃
+                content["error"] = str(e)
                 discarded_contents.append(content)
         
         logger.info(f"过滤完成: 共 {len(contents)} 条内容, 保留 {len(kept_contents)} 条, 丢弃 {len(discarded_contents)} 条")

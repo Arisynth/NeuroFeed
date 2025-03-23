@@ -63,8 +63,14 @@ def execute_task(task_id=None):
     
     # 初始化RSS解析器、内容过滤器和摘要生成器
     rss_parser = RssParser()
-    content_filter = ContentFilter(config)
-    summarizer = NewsSummarizer(config)
+    
+    try:
+        content_filter = ContentFilter(config)
+        summarizer = NewsSummarizer(config)
+    except Exception as e:
+        logger.error(f"初始化AI服务失败: {str(e)}")
+        logger.error("任务执行中止，AI服务是必须的")
+        return
     
     # 逐个处理任务
     for task in tasks:
@@ -175,10 +181,14 @@ def execute_task(task_id=None):
             # 应用内容过滤器 - 传入所有内容但不再传入全局兴趣标签
             logger.info(f"\n============ 开始内容过滤 ============")
             logger.info(f"待过滤内容总数: {len(all_contents)}")
-            logger.info(f"AI可用状态: {content_filter.ai_available}")
-            logger.info(f"AI模型: {content_filter.ollama_model if content_filter.provider == 'ollama' else content_filter.openai_model}")
+            logger.info(f"AI模型: {content_filter.ollama_model or content_filter.openai_model}")
             
-            kept_contents, discarded_contents = content_filter.filter_content_batch(all_contents)
+            try:
+                kept_contents, discarded_contents = content_filter.filter_content_batch(all_contents)
+            except Exception as e:
+                logger.error(f"AI内容过滤失败: {str(e)}")
+                logger.error("由于AI过滤不可用，任务无法继续")
+                continue  # 跳过当前任务
             
             # 记录过滤结果的详细统计
             logger.info(f"\n============ 过滤结果 ============")
@@ -211,33 +221,37 @@ def execute_task(task_id=None):
                 logger.info(f"\n============ 开始生成新闻简报 ============")
                 logger.info(f"需要生成简报的内容数: {len(kept_contents)}")
                 
-                # 生成简报
-                summarized_contents = summarizer.generate_summaries(kept_contents)
-                
-                # 记录简报结果
-                ai_summarized = sum(1 for c in summarized_contents if c.get("summary_method") == "ai")
-                simple_summarized = sum(1 for c in summarized_contents if c.get("summary_method") == "simple")
-                original_summarized = sum(1 for c in summarized_contents if c.get("summary_method") == "original")
-                
-                logger.info(f"\n============ 简报生成结果 ============")
-                logger.info(f"AI生成简报: {ai_summarized}/{len(summarized_contents)}")
-                logger.info(f"简单摘要: {simple_summarized}/{len(summarized_contents)}")
-                logger.info(f"原始摘要: {original_summarized}/{len(summarized_contents)}")
-                
-                # 显示一些简报示例
-                examples_count = min(3, len(summarized_contents))
-                if examples_count > 0:
-                    logger.info(f"\n============ 简报示例 ============")
-                    for i in range(examples_count):
-                        content = summarized_contents[i]
-                        title = content.get("title", "无标题")
-                        brief = content.get("news_brief", "")
-                        method = content.get("summary_method", "未知")
-                        logger.info(f"示例 #{i+1} ({method}): {title}")
-                        logger.info(f"简报内容:\n{brief}")  # 显示完整简报
-                
-                # 更新过滤后的内容为简报后的内容
-                kept_contents = summarized_contents
+                try:
+                    # 生成简报
+                    summarized_contents = summarizer.generate_summaries(kept_contents)
+                    
+                    # 记录简报结果
+                    ai_summarized = sum(1 for c in summarized_contents if c.get("summary_method") == "ai")
+                    simple_summarized = sum(1 for c in summarized_contents if c.get("summary_method") == "simple")
+                    original_summarized = sum(1 for c in summarized_contents if c.get("summary_method") == "original")
+                    
+                    logger.info(f"\n============ 简报生成结果 ============")
+                    logger.info(f"AI生成简报: {ai_summarized}/{len(summarized_contents)}")
+                    logger.info(f"简单摘要: {simple_summarized}/{len(summarized_contents)}")
+                    logger.info(f"原始摘要: {original_summarized}/{len(summarized_contents)}")
+                    
+                    # 显示一些简报示例
+                    examples_count = min(3, len(summarized_contents))
+                    if examples_count > 0:
+                        logger.info(f"\n============ 简报示例 ============")
+                        for i in range(examples_count):
+                            content = summarized_contents[i]
+                            title = content.get("title", "无标题")
+                            brief = content.get("news_brief", "")
+                            method = content.get("summary_method", "未知")
+                            logger.info(f"示例 #{i+1} ({method}): {title}")
+                            logger.info(f"简报内容:\n{brief}")  # 显示完整简报
+                    
+                    # 更新过滤后的内容为简报后的内容
+                    kept_contents = summarized_contents
+                except Exception as e:
+                    logger.error(f"生成新闻简报失败: {str(e)}")
+                    logger.error("将使用未生成简报的原始内容继续")
             
             # 更新任务的last_run时间
             task.update_task_run()

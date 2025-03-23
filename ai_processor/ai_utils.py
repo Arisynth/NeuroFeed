@@ -13,6 +13,10 @@ class AiProvider(str, Enum):
     OLLAMA = "ollama"
     OPENAI = "openai"
 
+class AiException(Exception):
+    """表示AI服务错误的异常"""
+    pass
+
 class AiService:
     """AI服务抽象类，提供统一的接口调用AI模型"""
     
@@ -21,14 +25,15 @@ class AiService:
         
         Args:
             config: 包含AI设置的配置字典
+            
+        Raises:
+            AiException: 当AI服务不可用时
         """
         self.config = config or {}
         # 从配置加载AI设置
         self.ai_settings = self.config.get("global_settings", {}).get("ai_settings", {})
         self.provider = self.ai_settings.get("provider", "ollama")
-        self.ai_available = True  # 用于跟踪AI服务可用性
         self.connection_errors = 0  # 连接错误计数
-        self.ai_error_threshold = 3  # 超过此阈值时切换到本地处理模式
         
         if self.provider == AiProvider.OLLAMA:
             self.ollama_host = self.ai_settings.get("ollama_host", "http://localhost:11434")
@@ -36,16 +41,14 @@ class AiService:
             
             # 检查Ollama是否可用
             if not self._check_ollama_availability():
-                self.ai_available = False
-                logger.warning(f"Ollama在{self.ollama_host}不可用，将使用本地处理")
+                raise AiException(f"Ollama在{self.ollama_host}不可用，请确保Ollama服务已启动")
         else:  # OpenAI
             self.openai_key = self.ai_settings.get("openai_key", "")
             self.openai_model = self.ai_settings.get("openai_model", "gpt-3.5-turbo")
             
             # 检查OpenAI是否可用
             if not self.openai_key:
-                self.ai_available = False
-                logger.warning("未提供OpenAI API密钥，将使用本地处理")
+                raise AiException("未提供OpenAI API密钥，请在设置中添加有效的API密钥")
     
     def _check_ollama_availability(self) -> bool:
         """检查Ollama服务是否可用
@@ -69,12 +72,11 @@ class AiService:
             max_retries: 最大重试次数
             
         Returns:
-            AI响应文本，如果失败则返回空字符串
+            AI响应文本
+            
+        Raises:
+            AiException: 当AI调用失败时
         """
-        if not self.ai_available:
-            logger.warning("AI服务不可用")
-            return ""
-        
         for retry in range(max_retries + 1):
             try:
                 if self.provider == AiProvider.OLLAMA:
@@ -84,14 +86,13 @@ class AiService:
             except Exception as e:
                 logger.error(f"调用AI失败 (尝试 {retry+1}/{max_retries+1}): {str(e)}")
                 self.connection_errors += 1
-                if self.connection_errors >= self.ai_error_threshold:
-                    self.ai_available = False
-                    logger.warning(f"连接错误过多，AI服务标记为不可用")
-                    return ""
                 if retry < max_retries:
                     time.sleep(2)  # 重试前等待2秒
+                else:
+                    raise AiException(f"AI服务调用失败: {str(e)}")
         
-        return ""
+        # 正常情况下不会执行到这里，因为如果所有重试都失败，会在上面的异常处理中抛出异常
+        raise AiException("AI服务调用失败")
     
     def _call_ollama(self, prompt: str) -> str:
         """调用Ollama API获取响应
@@ -101,6 +102,9 @@ class AiService:
             
         Returns:
             Ollama的响应文本
+            
+        Raises:
+            Exception: 当Ollama调用出错时
         """
         try:
             logger.info(f"调用Ollama (模型: {self.ollama_model})")
@@ -118,14 +122,18 @@ class AiService:
             if response.status_code == 200:
                 data = response.json()
                 result = data.get("response", "")
+                if not result:
+                    raise Exception("Ollama返回了空响应")
+                    
                 logger.info(f"Ollama响应成功，长度: {len(result)} 字符")
                 return result
             else:
-                logger.error(f"Ollama API错误: {response.status_code}, {response.text}")
-                return ""
+                error_msg = f"Ollama API错误: {response.status_code}, {response.text}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
         except Exception as e:
             logger.error(f"调用Ollama时出错: {str(e)}")
-            raise  # 重新抛出异常，由上层处理重试
+            raise  # 重新抛出异常
     
     def _call_openai(self, prompt: str) -> str:
         """调用OpenAI API获取响应
@@ -135,6 +143,9 @@ class AiService:
             
         Returns:
             OpenAI的响应文本
+            
+        Raises:
+            Exception: 当OpenAI调用出错时
         """
         try:
             logger.info(f"调用OpenAI (模型: {self.openai_model})")
@@ -162,14 +173,18 @@ class AiService:
             if response.status_code == 200:
                 response_data = response.json()
                 result = response_data["choices"][0]["message"]["content"]
+                if not result:
+                    raise Exception("OpenAI返回了空响应")
+                    
                 logger.info(f"OpenAI响应成功，长度: {len(result)} 字符")
                 return result
             else:
-                logger.error(f"OpenAI API错误: {response.status_code}, {response.text}")
-                return ""
+                error_msg = f"OpenAI API错误: {response.status_code}, {response.text}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
         except Exception as e:
             logger.error(f"调用OpenAI时出错: {str(e)}")
-            raise  # 重新抛出异常，由上层处理重试
+            raise  # 重新抛出异常
     
     def parse_json_response(self, response_text: str) -> Dict[str, Any]:
         """从AI响应中解析JSON
@@ -178,10 +193,13 @@ class AiService:
             response_text: AI响应文本
             
         Returns:
-            解析后的JSON字典，如果解析失败则返回空字典
+            解析后的JSON字典
+            
+        Raises:
+            AiException: 当JSON解析失败时
         """
         if not response_text:
-            return {}
+            raise AiException("AI返回了空响应，无法解析")
             
         try:
             # 尝试提取JSON字符串
@@ -190,15 +208,16 @@ class AiService:
             end_idx = response_text.rfind('}') + 1
             
             if start_idx == -1 or end_idx == 0:
-                logger.warning("从AI响应中找不到JSON")
-                return {}
+                raise AiException("从AI响应中找不到JSON格式内容")
                 
             json_str = response_text[start_idx:end_idx]
             result = json.loads(json_str)
             return result
         except json.JSONDecodeError as e:
-            logger.error(f"解析JSON时出错: {str(e)}")
-            return {}
+            error_msg = f"解析JSON时出错: {str(e)}"
+            logger.error(error_msg)
+            raise AiException(error_msg)
         except Exception as e:
-            logger.error(f"处理AI响应时出错: {str(e)}")
-            return {}
+            error_msg = f"处理AI响应时出错: {str(e)}"
+            logger.error(error_msg)
+            raise AiException(error_msg)
