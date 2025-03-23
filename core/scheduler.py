@@ -361,11 +361,7 @@ def start_scheduler():
     logger.info("调度器已在后台启动")
 
 def run_task_now(task_id):
-    """立即执行指定任务
-    
-    Args:
-        task_id: 要执行的任务ID
-    """
+    """立即执行指定任务"""
     logger.info(f"立即执行任务 ID: {task_id}")
     
     # 在单独的线程中执行，避免阻塞主线程

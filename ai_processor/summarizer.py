@@ -166,9 +166,9 @@ class NewsSummarizer:
         elif self.brief_style == "conversational":
             style_description = "对话式、通俗易懂的"
             
-        return f"""请为以下新闻生成一个{style_description}内容简报。
+        return f"""请为以下新闻生成一个{style_description}内容简报。简报语言请使用中文，但人名等特殊名词可以不翻译。
 简报应该是完整的，有开头有结尾，包含新闻的主要信息点，让读者能快速了解新闻的要点。
-简报内容应该简洁明了，但不要过于简略以至于缺失重要信息。
+简报内容应该简洁明了，尽量简短，但不要过于简略以至于缺失重要信息。
 简报里的所有内容都必须基于新闻原文，不要编造任何信息：
 
 标题：{title}

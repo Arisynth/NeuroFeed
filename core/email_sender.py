@@ -4,6 +4,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
+from core.encryption import decrypt_password
 
 # 配置日志
 logger = logging.getLogger("email_sender")
@@ -33,7 +34,10 @@ class EmailSender:
         
         # 发件人设置
         self.sender_email = self.email_settings.get("sender_email", "")
-        self.email_password = self.email_settings.get("email_password", "")
+        
+        # 解密密码
+        encrypted_password = self.email_settings.get("email_password", "")
+        self.email_password = decrypt_password(encrypted_password)
         
         # 验证必要的设置是否存在
         if not all([self.smtp_server, self.sender_email, self.email_password]):

@@ -1,12 +1,13 @@
 from PyQt6.QtWidgets import (QDialog, QTabWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                             QLineEdit, QCheckBox, QComboBox, QPushButton, QFormLayout, 
                             QGroupBox, QWidget, QMessageBox, QSpinBox, QStackedWidget)
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from core.config_manager import load_config, save_config
 import requests
 import json
 from gui.tag_editor import TagEditor  # 导入标签编辑器
 from core.email_sender import EmailSender
+from core.encryption import encrypt_password, decrypt_password
 
 class SettingsWindow(QDialog):
     def __init__(self, parent=None):
@@ -14,9 +15,13 @@ class SettingsWindow(QDialog):
         self.setWindowTitle("Settings")
         self.setMinimumSize(500, 400)
         
-        # Load current settings
+        # 记录原始配置用于检测更改
         self.config = load_config()
+        self.original_config = self._get_serializable_config(self.config)
         self.global_settings = self.config.get("global_settings", {})
+        
+        # 标记是否有未保存的更改
+        self.has_unsaved_changes = False
         
         # Main layout
         main_layout = QVBoxLayout(self)
@@ -38,24 +43,62 @@ class SettingsWindow(QDialog):
         
         main_layout.addWidget(self.tabs)
         
+        # Status message (轻提示)
+        self.status_label = QLabel("")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        main_layout.addWidget(self.status_label)
+        
         # Buttons
         button_layout = QHBoxLayout()
         
-        self.save_btn = QPushButton("Save")
-        self.cancel_btn = QPushButton("Cancel")
         self.test_email_btn = QPushButton("Test Email Settings")
+        self.save_btn = QPushButton("Save")
+        self.close_btn = QPushButton("Close")
         
-        self.save_btn.clicked.connect(self.save_settings)
-        self.cancel_btn.clicked.connect(self.reject)
         self.test_email_btn.clicked.connect(self.test_email_settings)
+        self.save_btn.clicked.connect(self.save_settings)
+        self.close_btn.clicked.connect(self.close_window)
         
         button_layout.addWidget(self.test_email_btn)
         button_layout.addStretch()
         button_layout.addWidget(self.save_btn)
-        button_layout.addWidget(self.cancel_btn)
+        button_layout.addWidget(self.close_btn)
         
         main_layout.addLayout(button_layout)
-
+        
+        # 连接信号槽来检测更改
+        self.connect_change_signals()
+    
+    def _get_serializable_config(self, config):
+        """创建配置的可序列化副本以进行比较"""
+        return json.dumps(config, sort_keys=True)
+    
+    def connect_change_signals(self):
+        """连接所有可能导致更改的控件信号"""
+        # Email设置
+        self.smtp_server.textChanged.connect(self.mark_as_changed)
+        self.smtp_port.valueChanged.connect(self.mark_as_changed)
+        self.smtp_security.currentIndexChanged.connect(self.mark_as_changed)
+        self.sender_email.textChanged.connect(self.mark_as_changed)
+        self.email_password.textChanged.connect(self.mark_as_changed)
+        self.remember_password.stateChanged.connect(self.mark_as_changed)
+        
+        # AI设置
+        self.ai_provider.currentIndexChanged.connect(self.mark_as_changed)
+        self.ollama_host.textChanged.connect(self.mark_as_changed)
+        self.ollama_model.currentIndexChanged.connect(self.mark_as_changed)
+        self.openai_key.textChanged.connect(self.mark_as_changed)
+        self.openai_model.currentIndexChanged.connect(self.mark_as_changed)
+        
+        # 通用设置
+        self.start_on_boot.stateChanged.connect(self.mark_as_changed)
+        self.minimize_to_tray.stateChanged.connect(self.mark_as_changed)
+        self.show_notifications.stateChanged.connect(self.mark_as_changed)
+    
+    def mark_as_changed(self):
+        """标记有未保存的更改"""
+        self.has_unsaved_changes = True
+    
     def create_email_tab(self):
         """Create the email settings tab"""
         email_tab = QWidget()
@@ -89,8 +132,12 @@ class SettingsWindow(QDialog):
         auth_group = QGroupBox("Authentication Settings")
         auth_form = QFormLayout(auth_group)
         
+        # 如果密码已加密，解密显示
+        email_password = self.global_settings.get("email_settings", {}).get("email_password", "")
+        decrypted_password = decrypt_password(email_password)
+        
         self.sender_email = QLineEdit(email_settings.get("sender_email", ""))
-        self.email_password = QLineEdit(email_settings.get("email_password", ""))
+        self.email_password = QLineEdit(decrypted_password)
         self.email_password.setEchoMode(QLineEdit.EchoMode.Password)
         self.remember_password = QCheckBox("Remember password")
         self.remember_password.setChecked(email_settings.get("remember_password", False))
@@ -403,7 +450,7 @@ class SettingsWindow(QDialog):
         self.tabs.addTab(interests_tab, "Interest Tags")
 
     def save_settings(self):
-        """Save all settings to config"""
+        """保存所有设置但不关闭窗口"""
         # Email settings
         email_settings = {
             "smtp_server": self.smtp_server.text(),
@@ -412,9 +459,9 @@ class SettingsWindow(QDialog):
             "sender_email": self.sender_email.text(),
         }
         
-        # Only save password if remember password is checked
+        # 加密密码后再存储
         if self.remember_password.isChecked():
-            email_settings["email_password"] = self.email_password.text()
+            email_settings["email_password"] = encrypt_password(self.email_password.text())
             email_settings["remember_password"] = True
         else:
             email_settings["remember_password"] = False
@@ -453,17 +500,49 @@ class SettingsWindow(QDialog):
         self.config["global_settings"] = self.global_settings
         save_config(self.config)
         
-        QMessageBox.information(self, "Settings Saved", "Your settings have been saved.")
-        self.accept()
+        # 保存后更新比较基准
+        self.original_config = self._get_serializable_config(self.config)
+        self.has_unsaved_changes = False
+        
+        # 显示临时保存成功提示
+        self.status_label.setText("Settings saved successfully!")
+        self.status_label.setStyleSheet("color: green")
+        
+        # 3秒后清除提示
+        QTimer.singleShot(3000, self.clear_status)
+    
+    def clear_status(self):
+        """清除状态消息"""
+        self.status_label.setText("")
+        self.status_label.setStyleSheet("")
+    
+    def close_window(self):
+        """关闭窗口，如有未保存更改则提示"""
+        if self.has_unsaved_changes:
+            reply = QMessageBox.question(
+                self, 
+                "Unsaved Changes", 
+                "You have unsaved changes. Do you want to save before closing?",
+                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel
+            )
+            
+            if reply == QMessageBox.StandardButton.Save:
+                self.save_settings()
+                self.accept()
+            elif reply == QMessageBox.StandardButton.Discard:
+                self.reject()
+            # 取消则不做任何事
+        else:
+            self.accept()
 
     def test_email_settings(self):
-        """Test the email settings by sending a test email"""
+        """测试邮件设置"""
         # Collect email settings
         server = self.smtp_server.text()
         port = self.smtp_port.value()
         security = self.smtp_security.currentText()
         email = self.sender_email.text()
-        password = self.email_password.text()
+        password = self.email_password.text()  # 直接使用输入框中的明文密码进行测试
         
         if not server or not email or not password:
             QMessageBox.warning(self, "Incomplete Information", 
