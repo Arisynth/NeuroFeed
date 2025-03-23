@@ -327,7 +327,7 @@ def setup_scheduled_tasks():
         
         if schedule_type == "daily":
             # 每日执行
-            time_str = task_schedule.get("time", "08:00")
+            time_str = task_schedule.get("time", "22:30")
             logger.info(f"设置任务 {task.name} 每日 {time_str} 执行")
             
             # 创建闭包保存task_id

@@ -205,14 +205,16 @@ class EmailSender:
                 news_brief = content.get("news_brief", "无内容")
                 link = content.get("link", "#")
                 
-                # 获取标签/分类（如果有）
+                # 修改标签获取逻辑，优先使用AI评估的匹配标签
                 tags = []
-                if "feed_labels" in content and content["feed_labels"]:
-                    tags = content["feed_labels"]
-                elif "evaluation" in content and "interest_match" in content["evaluation"]:
+                # 优先尝试从AI评估结果中获取匹配的标签
+                if "evaluation" in content and "interest_match" in content["evaluation"]:
                     matched_tags = content["evaluation"]["interest_match"].get("matched_tags", [])
                     if matched_tags:
                         tags = matched_tags
+                # 如果AI评估没有产生标签，再尝试使用RSS源的标签
+                elif "feed_labels" in content and content["feed_labels"]:
+                    tags = content["feed_labels"]
                 
                 # 构建分类标签HTML
                 categories_html = ""
