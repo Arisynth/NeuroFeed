@@ -2,7 +2,7 @@ import schedule
 import time
 import threading
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from core.config_manager import load_config, save_config, get_tasks, save_task
 from core.rss_parser import RssParser
 from ai_processor.filter import ContentFilter
@@ -321,14 +321,15 @@ def setup_scheduled_tasks():
     tasks = get_tasks()
     
     # 为每个任务设置定时
+    task_count = 0
     for task in tasks:
         task_schedule = task.schedule
         schedule_type = task_schedule.get("type", "daily")
         
         if schedule_type == "daily":
             # 每日执行
-            time_str = task_schedule.get("time", "22:30")
-            logger.info(f"设置任务 {task.name} 每日 {time_str} 执行")
+            time_str = task_schedule.get("time", "08:00")
+            logger.info(f"设置任务 {task.name} (ID: {task.task_id}) 每日 {time_str} 执行")
             
             # 创建闭包保存task_id
             def create_job(task_id):
@@ -336,10 +337,48 @@ def setup_scheduled_tasks():
             
             # 添加到定时任务
             schedule.every().day.at(time_str).do(create_job(task.task_id))
+            task_count += 1
         
         # 可以添加更多类型的定时 (weekly, hourly等)
     
-    logger.info("定时任务设置完成")
+    logger.info(f"定时任务设置完成，共 {task_count} 个任务被调度")
+    
+    # 输出接下来24小时内将执行的任务
+    log_upcoming_tasks()
+
+def log_upcoming_tasks(hours_ahead=24):
+    """记录接下来几小时内将执行的任务"""
+    now = datetime.now()
+    end_time = now + timedelta(hours=hours_ahead)
+    
+    logger.info(f"\n============ 未来 {hours_ahead} 小时内的定时任务 ============")
+    
+    # 获取所有任务
+    jobs = schedule.get_jobs()
+    if not jobs:
+        logger.info("没有设置任何定时任务")
+        return
+    
+    # 计算下一次运行时间并排序
+    upcoming_jobs = []
+    for job in jobs:
+        next_run = job.next_run
+        if next_run and next_run <= end_time:
+            upcoming_jobs.append((next_run, job))
+    
+    # 按时间排序
+    upcoming_jobs.sort(key=lambda x: x[0])
+    
+    # 显示任务
+    if upcoming_jobs:
+        for next_run, job in upcoming_jobs:
+            time_diff = next_run - now
+            hours = time_diff.seconds // 3600
+            minutes = (time_diff.seconds % 3600) // 60
+            logger.info(f"任务将在 {next_run.strftime('%Y-%m-%d %H:%M:%S')} 执行 (还有 {hours}小时{minutes}分钟)")
+            logger.info(f"- 任务描述: {job.job_func.__name__}")
+    else:
+        logger.info(f"未来 {hours_ahead} 小时内没有定时任务")
 
 def start_scheduler():
     """启动调度器"""
@@ -348,10 +387,24 @@ def start_scheduler():
     # 设置定时任务
     setup_scheduled_tasks()
     
+    # 存储线程引用以便后续检查
+    scheduler_thread = None
+    
     # 在单独的线程中运行调度器
     def run_scheduler():
+        logger.info("调度器线程已启动")
+        last_check = datetime.now()
+        
         while True:
             schedule.run_pending()
+            
+            # 每小时记录一次调度器状态
+            now = datetime.now()
+            if (now - last_check).total_seconds() > 3600:  # 1小时
+                logger.info("调度器正在运行 - 定期状态检查")
+                log_upcoming_tasks()
+                last_check = now
+                
             time.sleep(60)  # 每分钟检查一次待执行的任务
     
     # 创建并启动线程
@@ -359,6 +412,32 @@ def start_scheduler():
     scheduler_thread.start()
     
     logger.info("调度器已在后台启动")
+    return scheduler_thread
+
+def get_scheduler_status():
+    """获取调度器状态信息"""
+    status = {
+        "active_jobs": len(schedule.get_jobs()),
+        "next_jobs": []
+    }
+    
+    # 获取接下来24小时内的任务
+    now = datetime.now()
+    end_time = now + timedelta(hours=24)
+    
+    for job in schedule.get_jobs():
+        next_run = job.next_run
+        if next_run and next_run <= end_time:
+            time_to_run = (next_run - now).total_seconds() / 60  # 分钟
+            status["next_jobs"].append({
+                "time": next_run.strftime("%Y-%m-%d %H:%M:%S"),
+                "minutes_from_now": round(time_to_run),
+                "description": job.job_func.__name__
+            })
+    
+    # 按执行时间排序
+    status["next_jobs"].sort(key=lambda x: x["minutes_from_now"])
+    return status
 
 def run_task_now(task_id):
     """立即执行指定任务"""

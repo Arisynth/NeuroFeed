@@ -11,11 +11,11 @@
             ],
             "schedule": {
                 "type": "daily",
-                "time": "08:00"
+                "time": "06:00"
             },
             "recipients": [
-                "neurofeed@163.com",
-                "yang.cheng_nj@outlook.com"
+                "yang.cheng_nj@outlook.com",
+                "juyouyou.alice@icloud.com"
             ],
             "ai_settings": {
                 "summary_length": "medium"
@@ -23,7 +23,7 @@
             "feeds_status": {
                 "https://www.ithome.com/rss/": {
                     "status": "success",
-                    "last_fetch": "2025-03-23T21:31:22.102204"
+                    "last_fetch": "2025-03-24T06:00:42.952167"
                 },
                 "https://www.ithome.com/rss": {
                     "status": "success",
@@ -31,24 +31,32 @@
                 },
                 "https://rsshub.rssforever.com/36kr/hot-list": {
                     "status": "success",
-                    "last_fetch": "2025-03-23T21:31:22.102260"
+                    "last_fetch": "2025-03-24T06:00:42.952234"
                 },
                 "https://rsshub.rssforever.com/caixinglobal/latest": {
                     "status": "success",
-                    "last_fetch": "2025-03-23T21:31:22.102303"
+                    "last_fetch": "2025-03-24T06:00:42.952291"
+                },
+                "https://rsshub.rssforever.com/infzm/1": {
+                    "status": "success",
+                    "last_fetch": "2025-03-24T06:00:42.952340"
                 }
             },
             "recipients_status": {
                 "neurofeed@163.com": {
                     "status": "success",
-                    "last_sent": "2025-03-23T21:49:22.431628"
+                    "last_sent": "2025-03-23T23:49:32.229584"
                 },
                 "yang.cheng_nj@outlook.com": {
                     "status": "success",
-                    "last_sent": "2025-03-23T21:49:22.431684"
+                    "last_sent": "2025-03-24T06:27:19.804975"
+                },
+                "juyouyou.alice@icloud.com": {
+                    "status": "success",
+                    "last_sent": "2025-03-24T06:27:19.804994"
                 }
             },
-            "last_run": "2025-03-23T21:49:22.431882",
+            "last_run": "2025-03-24T06:27:19.805229",
             "feed_config": {
                 "https://www.ithome.com/rss/": {
                     "items_count": 3,
@@ -74,7 +82,7 @@
                     ]
                 },
                 "https://rsshub.rssforever.com/caixinglobal/latest": {
-                    "items_count": 3,
+                    "items_count": 10,
                     "labels": [
                         "\u65f6\u4e8b",
                         "\u653f\u6cbb",
@@ -86,7 +94,7 @@
                     ]
                 },
                 "https://rsshub.rssforever.com/infzm/1": {
-                    "items_count": 3,
+                    "items_count": 10,
                     "labels": [
                         "\u65f6\u4e8b",
                         "\u653f\u6cbb",
