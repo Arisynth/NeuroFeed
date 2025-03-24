@@ -243,9 +243,19 @@ class EmailSender:
             evaluation = content.get("evaluation", {})
             importance = evaluation.get("importance", 5)
             
+            # 确保importance是数字类型
+            if not isinstance(importance, (int, float)):
+                try:
+                    # 如果是字典，看看是否有score或value键
+                    if isinstance(importance, dict):
+                        importance = importance.get("score", importance.get("value", 5))
+                    importance = float(importance)  # 尝试转换为数字
+                except (ValueError, TypeError):
+                    importance = 5  # 转换失败则使用默认值
+            
             # 构建重要性星级显示
             importance_stars = ""
-            if importance > 0:
+            if importance > 0:  # 现在importance一定是数字类型
                 # 将1-10分转换为1-5星
                 star_count = min(5, max(1, round(importance / 2)))
                 importance_stars = '<div class="rating">' + '<span class="star">★</span>' * star_count + '</div>'

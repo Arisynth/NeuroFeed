@@ -387,6 +387,15 @@ class SettingsWindow(QDialog):
             QMessageBox.warning(self, "Connection Error", 
                              f"Could not connect to Ollama at {host_url}.\nUsing default model list.\nError: {str(e)}")
 
+    def on_ai_provider_changed(self, index):
+        """Show/hide relevant AI provider settings based on the selected provider"""
+        if index == 0:  # Ollama
+            self.ollama_group.setVisible(True)
+            self.openai_group.setVisible(False)
+        else:  # OpenAI
+            self.ollama_group.setVisible(False)
+            self.openai_group.setVisible(True)
+
     def create_general_tab(self):
         """Create the general settings tab"""
         general_tab = QWidget()
