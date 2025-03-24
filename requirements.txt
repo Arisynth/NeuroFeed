@@ -1,4 +1,6 @@
-PyQt6==6.6.1
+PyQt6==6.5.3
+PyQt6-Qt6==6.5.3
+PyQt6-sip==13.6.0
 schedule==1.2.1
 feedparser==6.0.10
 requests==2.31.0
