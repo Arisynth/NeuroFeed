@@ -421,18 +421,81 @@ class SettingsWindow(QDialog):
         behavior_form.addRow("测试功能:", self.skip_processed_checkbox)
         
         general_layout.addWidget(behavior_group)
+        
+        # 添加数据管理组
+        data_group = QGroupBox("数据管理")
+        data_layout = QVBoxLayout(data_group)
+        
+        # 添加清除缓存按钮
+        clear_cache_btn = QPushButton("清除RSS新闻缓存")
+        clear_cache_btn.setToolTip("清除数据库中存储的所有RSS新闻数据，以便重新获取和处理")
+        clear_cache_btn.clicked.connect(self.clear_rss_cache)
+        
+        # 添加说明标签
+        cache_description = QLabel("点击按钮清除已处理的新闻缓存，确保下次运行时重新获取和处理所有RSS源")
+        cache_description.setWordWrap(True)
+        cache_description.setStyleSheet("color: #666; font-size: 11px;")
+        
+        data_layout.addWidget(clear_cache_btn)
+        data_layout.addWidget(cache_description)
+        
+        general_layout.addWidget(data_group)
         general_layout.addStretch()
         
         self.tabs.addTab(general_tab, "General")
 
-    def on_ai_provider_changed(self, index):
-        """Show/hide relevant AI provider settings"""
-        if index == 0:  # Ollama
-            self.ollama_group.setVisible(True)
-            self.openai_group.setVisible(False)
-        else:  # OpenAI
-            self.ollama_group.setVisible(False)
-            self.openai_group.setVisible(True)
+    def clear_rss_cache(self):
+        """清除RSS新闻缓存数据库"""
+        reply = QMessageBox.question(
+            self, 
+            "确认清除缓存", 
+            "确定要清除所有RSS新闻缓存吗？\n\n这将删除数据库中的所有新闻记录，"
+            "确保下次运行任务时重新获取和处理所有RSS条目。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                import sqlite3
+                import os
+                
+                # 数据库文件路径
+                db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'rss_news.db')
+                
+                if os.path.exists(db_path):
+                    # 连接数据库
+                    conn = sqlite3.connect(db_path)
+                    cursor = conn.cursor()
+                    
+                    # 获取当前表的列表
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                    tables = cursor.fetchall()
+                    
+                    # 清空所有相关表，但保留表结构
+                    for table in tables:
+                        table_name = table[0]
+                        if table_name != 'sqlite_sequence':  # 跳过SQLite内部表
+                            cursor.execute(f"DELETE FROM {table_name}")
+                    
+                    # 提交更改
+                    conn.commit()
+                    conn.close()
+                    
+                    QMessageBox.information(self, "缓存已清除", "RSS新闻缓存已成功清除！")
+                    self.status_label.setText("RSS缓存已清除！")
+                    self.status_label.setStyleSheet("color: green;")
+                    
+                    # 5秒后清除状态消息
+                    QTimer.singleShot(5000, self.clear_status)
+                else:
+                    QMessageBox.information(self, "操作完成", "数据库文件不存在，无需清除。")
+                    
+            except Exception as e:
+                import traceback
+                error_details = traceback.format_exc()
+                print(f"清除RSS缓存出错: {error_details}")
+                QMessageBox.critical(self, "错误", f"清除缓存时发生错误:\n{str(e)}")
 
     def create_interests_tab(self):
         """Create user interest tags settings tab"""

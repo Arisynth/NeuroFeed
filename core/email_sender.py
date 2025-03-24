@@ -148,14 +148,37 @@ class EmailSender:
             # 从评估结果中获取排序指标，如果缺失则提供默认值
             evaluation = item.get("evaluation", {})
             
-            # 获取重要性分数（0-10，值越高越重要）
+            # 获取重要性分数，确保是数字类型
             importance = evaluation.get("importance", 5)
+            if not isinstance(importance, (int, float)):
+                # 如果不是数字类型，尝试提取数字或使用默认值
+                try:
+                    # 如果是字典，看看是否有score或value键
+                    if isinstance(importance, dict):
+                        importance = importance.get("score", importance.get("value", 5))
+                    importance = float(importance)  # 尝试转换为数字
+                except (ValueError, TypeError):
+                    importance = 5  # 转换失败则使用默认值
             
-            # 获取时效性分数（0-10，值越高表示越及时）
+            # 获取时效性分数，确保是数字类型
             timeliness = evaluation.get("timeliness", 5)
+            if not isinstance(timeliness, (int, float)):
+                try:
+                    if isinstance(timeliness, dict):
+                        timeliness = timeliness.get("score", timeliness.get("value", 5))
+                    timeliness = float(timeliness)
+                except (ValueError, TypeError):
+                    timeliness = 5
             
-            # 获取趣味性分数（0-10，值越高表示越有趣）
+            # 获取趣味性分数，确保是数字类型
             interest = evaluation.get("interest", 5)
+            if not isinstance(interest, (int, float)):
+                try:
+                    if isinstance(interest, dict):
+                        interest = interest.get("score", interest.get("value", 5))
+                    interest = float(interest)
+                except (ValueError, TypeError):
+                    interest = 5
             
             # 获取发布/获取时间，如果没有则使用当前时间
             pub_time = item.get("pub_date", datetime.now().isoformat())
