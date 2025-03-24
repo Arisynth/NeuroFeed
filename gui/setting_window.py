@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (QDialog, QTabWidget, QVBoxLayout, QHBoxLayout, QLab
                             QLineEdit, QCheckBox, QComboBox, QPushButton, QFormLayout, 
                             QGroupBox, QWidget, QMessageBox, QSpinBox, QStackedWidget)
 from PyQt6.QtCore import Qt, QTimer
-from core.config_manager import load_config, save_config
+from core.config_manager import load_config, save_config, get_general_settings, update_general_settings
 import requests
 import json
 from gui.tag_editor import TagEditor  # 导入标签编辑器
@@ -94,6 +94,7 @@ class SettingsWindow(QDialog):
         self.start_on_boot.stateChanged.connect(self.mark_as_changed)
         self.minimize_to_tray.stateChanged.connect(self.mark_as_changed)
         self.show_notifications.stateChanged.connect(self.mark_as_changed)
+        self.skip_processed_checkbox.stateChanged.connect(self.mark_as_changed)
     
     def mark_as_changed(self):
         """标记有未保存的更改"""
@@ -411,6 +412,14 @@ class SettingsWindow(QDialog):
         behavior_form.addRow("", self.minimize_to_tray)
         behavior_form.addRow("", self.show_notifications)
         
+        # 创建临时测试开关 - 跳过已处理文章
+        self.skip_processed_checkbox = QCheckBox("跳过已处理的新闻文章（测试功能）")
+        self.skip_processed_checkbox.setChecked(general_settings.get("skip_processed_articles", False))
+        self.skip_processed_checkbox.setToolTip("启用后，系统将跳过已处理过的新闻文章，避免重复处理")
+        
+        # 添加测试开关到布局中
+        behavior_form.addRow("测试功能:", self.skip_processed_checkbox)
+        
         general_layout.addWidget(behavior_group)
         general_layout.addStretch()
         
@@ -479,21 +488,29 @@ class SettingsWindow(QDialog):
         if self.openai_key.text():
             ai_settings["openai_key"] = self.openai_key.text()
         
+        # 先获取当前设置
+        current_general_settings = get_general_settings()
+        prev_skip_setting = current_general_settings.get("skip_processed_articles", False)
+        current_skip_setting = self.skip_processed_checkbox.isChecked()
+        
         # General settings
         general_settings = {
             "start_on_boot": self.start_on_boot.isChecked(),
             "minimize_to_tray": self.minimize_to_tray.isChecked(),
             "show_notifications": self.show_notifications.isChecked(),
+            "skip_processed_articles": self.skip_processed_checkbox.isChecked()
         }
         
-        # 保存用户兴趣标签
+        # 更新通用设置
+        update_general_settings(general_settings)
+        
+        # 获取用户兴趣标签
         user_interests = self.tag_editor.get_tags()
         
         # 更新全局设置
         self.global_settings.update({
             "email_settings": email_settings,
             "ai_settings": ai_settings,
-            "general_settings": general_settings,
             "user_interests": user_interests  # 添加用户兴趣标签
         })
         
@@ -504,12 +521,20 @@ class SettingsWindow(QDialog):
         self.original_config = self._get_serializable_config(self.config)
         self.has_unsaved_changes = False
         
-        # 显示临时保存成功提示
-        self.status_label.setText("Settings saved successfully!")
-        self.status_label.setStyleSheet("color: green")
+        # 特别处理：输出调试信息确认设置已保存
+        print(f"保存设置 - 跳过已处理文章: {'是' if current_skip_setting else '否'}")
+        print(f"设置变化: {prev_skip_setting} -> {current_skip_setting}")
+        
+        # 如果跳过已处理文章设置发生了变化，显示特殊提示
+        if prev_skip_setting != current_skip_setting:
+            self.status_label.setText("设置已保存。新的文章处理设置将在下次运行任务时生效！")
+            self.status_label.setStyleSheet("color: green; font-weight: bold;")
+        else:
+            self.status_label.setText("设置已保存！")
+            self.status_label.setStyleSheet("color: green;")
         
         # 3秒后清除提示
-        QTimer.singleShot(3000, self.clear_status)
+        QTimer.singleShot(5000, self.clear_status)
     
     def clear_status(self):
         """清除状态消息"""

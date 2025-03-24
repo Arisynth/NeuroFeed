@@ -65,6 +65,9 @@ def execute_task(task_id=None):
     
     # 初始化RSS解析器、内容过滤器和摘要生成器
     rss_parser = RssParser()
+    # 确保使用最新配置
+    is_skipping = rss_parser.refresh_settings()
+    logger.info(f"任务执行器 - 跳过已处理文章: {'是' if is_skipping else '否'}")
     
     try:
         content_filter = ContentFilter(config)
@@ -187,6 +190,16 @@ def execute_task(task_id=None):
             
             try:
                 kept_contents, discarded_contents = content_filter.filter_content_batch(all_contents)
+                
+                # 标记丢弃的内容为已处理
+                for content in discarded_contents:
+                    if "article_id" in content:
+                        article_id = content["article_id"]
+                        success = rss_parser.db_manager.mark_as_processed(article_id)
+                        if success:
+                            logger.info(f"已标记丢弃文章为已处理: {content.get('title', '无标题')} (ID: {article_id})")
+                        else:
+                            logger.warning(f"标记丢弃文章失败: {content.get('title', '无标题')} (ID: {article_id})")
             except Exception as e:
                 logger.error(f"AI内容过滤失败: {str(e)}")
                 logger.error("由于AI过滤不可用，任务无法继续")
@@ -277,9 +290,18 @@ def execute_task(task_id=None):
                     success_count = sum(1 for r in results.values() if r.get("status") == "success")
                     logger.info(f"邮件发送完成: {success_count}/{len(task.recipients)}成功")
                     
-                    # 如果全部成功，更新任务状态
+                    # 如果全部成功，标记所有内容为已处理
                     if success_count == len(task.recipients):
                         logger.info("所有邮件发送成功")
+                        # 标记所有已发送的内容为已处理
+                        for content in kept_contents:
+                            if "article_id" in content:
+                                article_id = content["article_id"]
+                                success = rss_parser.db_manager.mark_as_processed(article_id)
+                                if success:
+                                    logger.info(f"已标记发送文章为已处理: {content.get('title', '无标题')} (ID: {article_id})")
+                                else:
+                                    logger.warning(f"标记发送文章失败: {content.get('title', '无标题')} (ID: {article_id})")
                     else:
                         logger.warning(f"部分邮件发送失败: {len(task.recipients) - success_count} 个失败")
                         for recipient, result in results.items():

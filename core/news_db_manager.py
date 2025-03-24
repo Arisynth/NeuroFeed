@@ -150,10 +150,67 @@ class NewsDBManager:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
+            # 检查文章是否存在
+            cursor.execute("SELECT id FROM news_articles WHERE article_id = ?", (article_id,))
+            if not cursor.fetchone():
+                print(f"Warning: Trying to mark non-existent article as processed: {article_id}")
+                conn.close()
+                return False
+                
             cursor.execute("UPDATE news_articles SET processed = 1 WHERE article_id = ?", (article_id,))
+            result = cursor.rowcount > 0
+            
             conn.commit()
             conn.close()
-            return True
+            return result
         except Exception as e:
             print(f"Error marking article as processed: {e}")
             return False
+    
+    def get_processed_status(self, article_id):
+        """
+        Check if an article has been processed.
+        
+        Args:
+            article_id (str): Unique identifier for the article
+            
+        Returns:
+            bool: True if processed, False if not processed or article doesn't exist
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT processed FROM news_articles WHERE article_id = ?", (article_id,))
+            result = cursor.fetchone()
+            
+            conn.close()
+            
+            # If the article exists and processed = 1
+            processed = result is not None and result[0] == 1
+            return processed
+        except Exception as e:
+            print(f"Error checking article processed status: {e}")
+            return False
+    
+    def get_all_processed_articles(self):
+        """
+        Get a list of all processed article IDs.
+        
+        Returns:
+            list: List of processed article IDs
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT article_id FROM news_articles WHERE processed = 1")
+            results = cursor.fetchall()
+            
+            conn.close()
+            
+            # Return list of article_ids
+            return [row[0] for row in results]
+        except Exception as e:
+            print(f"Error getting processed articles: {e}")
+            return []

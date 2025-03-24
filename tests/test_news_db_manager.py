@@ -115,6 +115,63 @@ class TestNewsDBManager(unittest.TestCase):
         self.assertTrue(self.db_manager.is_article_exists("new_article"))
         
         conn.close()
+    
+    def test_get_processed_status(self):
+        # Add an article
+        self.db_manager.add_news_article(
+            article_id="test_status",
+            title="Status Test",
+            link="http://example.com/status",
+            source="Test Source"
+        )
+        
+        # Initially should be not processed
+        self.assertFalse(self.db_manager.get_processed_status("test_status"))
+        
+        # Mark as processed
+        self.db_manager.mark_as_processed("test_status")
+        
+        # Now should be processed
+        self.assertTrue(self.db_manager.get_processed_status("test_status"))
+        
+        # Non-existent article should return False
+        self.assertFalse(self.db_manager.get_processed_status("nonexistent"))
+    
+    def test_get_all_processed_articles(self):
+        # Add multiple articles
+        self.db_manager.add_news_article(
+            article_id="article1",
+            title="Article 1",
+            link="http://example.com/1",
+            source="Test Source"
+        )
+        
+        self.db_manager.add_news_article(
+            article_id="article2",
+            title="Article 2",
+            link="http://example.com/2",
+            source="Test Source"
+        )
+        
+        self.db_manager.add_news_article(
+            article_id="article3",
+            title="Article 3",
+            link="http://example.com/3",
+            source="Test Source"
+        )
+        
+        # Mark some as processed
+        self.db_manager.mark_as_processed("article1")
+        self.db_manager.mark_as_processed("article3")
+        
+        # Get all processed articles
+        processed = self.db_manager.get_all_processed_articles()
+        
+        # Should have 2 processed articles
+        self.assertEqual(len(processed), 2)
+        self.assertIn("article1", processed)
+        self.assertIn("article3", processed)
+        self.assertNotIn("article2", processed)
 
 if __name__ == "__main__":
     unittest.main()

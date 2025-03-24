@@ -6,6 +6,7 @@ import logging
 from typing import List, Dict, Any, Optional
 import hashlib
 from .news_db_manager import NewsDBManager
+from .config_manager import load_config
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -24,13 +25,41 @@ class RssParser:
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": user_agent})
         self.db_manager = NewsDBManager()
+        # 从配置加载是否跳过已处理文章的设置（初始值）
+        config = load_config()
+        # 修复：更正配置路径访问方式
+        self.skip_processed = config.get("global_settings", {}).get("general_settings", {}).get("skip_processed_articles", False)
+        logger.info(f"初始化时 - 跳过已处理文章: {'是' if self.skip_processed else '否'}")
+        logger.debug(f"配置内容: {config}")
+    
+    def refresh_settings(self):
+        """刷新配置设置，确保使用最新的配置值"""
+        try:
+            config = load_config()
+            # 修复：更正配置路径访问方式
+            prev_setting = self.skip_processed
+            self.skip_processed = config.get("global_settings", {}).get("general_settings", {}).get("skip_processed_articles", False)
+            
+            logger.info(f"刷新设置 - 跳过已处理文章: {'是' if self.skip_processed else '否'}")
+            logger.debug(f"设置变化: {prev_setting} -> {self.skip_processed}")
+            logger.debug(f"配置结构: {config.get('global_settings', {}).get('general_settings', {})}")
+            
+            # 通过显式返回布尔值避免任何转换问题
+            return self.skip_processed is True
+        except Exception as e:
+            logger.error(f"刷新设置时出错: {e}")
+            return False
     
     def fetch_feed(self, feed_url: str, items_count: int = 10) -> Dict[str, Any]:
         """获取RSS Feed内容"""
         try:
+            # 每次获取Feed前刷新配置
+            self.refresh_settings()
+            
             logger.info(f"\n============ 开始获取Feed ============")
             logger.info(f"Feed URL: {feed_url}")
             logger.info(f"计划获取条目数量: {items_count}")
+            logger.info(f"跳过已处理文章: {'是' if self.skip_processed else '否'}")
             start_time = time.time()
             
             # 使用feedparser解析RSS Feed
@@ -64,41 +93,47 @@ class RssParser:
             
             # 获取指定数量的条目
             total_entries = len(feed.entries)
-            logger.info(f"Feed包含 {total_entries} 条原始条目, 将获取前 {min(items_count, total_entries)} 条")
-            entries = feed.entries[:items_count]
-            processed_entries = []
-            
-            # 显示Feed基本信息
-            feed_title = feed.feed.title if hasattr(feed, 'feed') and hasattr(feed.feed, 'title') else "未知"
-            feed_desc = feed.feed.description if hasattr(feed, 'feed') and hasattr(feed.feed, 'description') else "无描述"
-            feed_desc_short = feed_desc[:100] + "..." if len(feed_desc) > 100 else feed_desc
-            logger.info(f"Feed标题: {feed_title}")
-            logger.info(f"Feed描述: {feed_desc_short}")
+            logger.info(f"Feed包含 {total_entries} 条原始条目")
             
             # 处理每个条目
             logger.info(f"\n============ 处理Feed条目 ============")
-            for i, entry in enumerate(entries):
+            
+            processed_entries = []
+            skipped_count = 0
+            entry_index = 0
+            
+            # 处理所有条目，直到达到所需数量或遍历完所有条目
+            while len(processed_entries) < items_count and entry_index < total_entries:
+                if entry_index >= len(feed.entries):
+                    break
+                    
+                entry = feed.entries[entry_index]
+                entry_index += 1
+                
+                # 获取唯一标识符
+                article_id = getattr(entry, 'id', entry.link)
+                
+                # 如果启用了跳过处理过的文章功能，检查是否已处理
+                if self.skip_processed and self.db_manager.get_processed_status(article_id):
+                    skipped_count += 1
+                    title = getattr(entry, 'title', article_id)
+                    logger.info(f"跳过已处理的文章 #{entry_index}: {title}")
+                    continue
+                
                 # 提取发布日期，如果存在
                 published_date = None
                 if hasattr(entry, 'published_parsed') and entry.published_parsed:
                     published_date = datetime(*entry.published_parsed[:6]).isoformat()
-                    logger.info(f"条目 #{i+1} 发布日期: {published_date}")
                 elif hasattr(entry, 'updated_parsed') and entry.updated_parsed:
                     published_date = datetime(*entry.updated_parsed[:6]).isoformat()
-                    logger.info(f"条目 #{i+1} 更新日期: {published_date}")
-                else:
-                    logger.info(f"条目 #{i+1} 无日期信息")
                 
                 # 获取标题和链接
                 title = entry.title if hasattr(entry, 'title') else "无标题"
                 link = entry.link if hasattr(entry, 'link') else ""
-                logger.info(f"条目 #{i+1} 标题: {title}")
-                logger.info(f"条目 #{i+1} 链接: {link}")
+                logger.info(f"处理条目 #{len(processed_entries)+1} (总索引 #{entry_index}): {title}")
                 
                 # 获取摘要
                 summary = entry.summary if hasattr(entry, 'summary') else ""
-                summary_short = summary[:200] + "..." if len(summary) > 200 else summary
-                logger.info(f"条目 #{i+1} 摘要: {summary_short}")
                 
                 # 构建条目字典
                 processed_entry = {
@@ -108,16 +143,14 @@ class RssParser:
                     "published": published_date,
                     "source": feed.feed.title if hasattr(feed, 'feed') and hasattr(feed.feed, 'title') else feed_url,
                     "content": entry.content[0].value if hasattr(entry, 'content') and entry.content else summary if hasattr(entry, 'summary') else "",
+                    "article_id": article_id  # 保存原始文章ID用于后续处理
                 }
                 
                 # 记录内容长度
                 content_len = len(processed_entry["content"])
-                logger.info(f"条目 #{i+1} 内容长度: {content_len} 字符")
+                logger.info(f"条目内容长度: {content_len} 字符")
                 
                 processed_entries.append(processed_entry)
-                
-                # Create a unique identifier - prefer guid, fallback to link
-                article_id = getattr(entry, 'id', entry.link)
                 
                 # Generate content hash if content exists
                 content_hash = None
@@ -127,20 +160,27 @@ class RssParser:
                 elif hasattr(entry, 'summary'):
                     content_hash = hashlib.md5(entry.summary.encode()).hexdigest()
                 
-                # Get published date if available
-                published_date = None
-                if hasattr(entry, 'published'):
-                    published_date = entry.published
-                
                 # Store in database
                 self.db_manager.add_news_article(
                     article_id=article_id,
                     title=entry.title,
                     link=entry.link,
-                    source=feed.feed.title,
+                    source=feed.feed.title if hasattr(feed, 'feed') and hasattr(feed.feed, 'title') else feed_url,
                     published_date=published_date,
                     content_hash=content_hash
                 )
+            
+            # 如果启用了跳过文章功能，记录详细的统计信息
+            if self.skip_processed:
+                logger.info(f"\n============ 跳过已处理文章统计 ============")
+                logger.info(f"Feed包含的总条目数: {total_entries}")
+                logger.info(f"跳过的已处理文章数: {skipped_count}")
+                logger.info(f"成功获取的新文章数: {len(processed_entries)}")
+                
+                # 如果获取的文章数少于要求数量，记录原因
+                if len(processed_entries) < items_count:
+                    logger.info(f"注意: 获取的新文章数 ({len(processed_entries)}) 少于计划数量 ({items_count})")
+                    logger.info(f"原因: Feed中所有条目都已处理完毕或没有足够的新文章")
             
             elapsed_time = time.time() - start_time
             logger.info(f"\n============ Feed获取完成 ============")
@@ -152,9 +192,14 @@ class RssParser:
                 "status": "success",
                 "items": processed_entries,
                 "feed_info": {
-                    "title": feed_title,
-                    "description": feed_desc,
+                    "title": feed.feed.title if hasattr(feed, 'feed') and hasattr(feed.feed, 'title') else "未知",
+                    "description": feed.feed.description if hasattr(feed, 'feed') and hasattr(feed.feed, 'description') else "无描述",
                     "link": feed.feed.link if hasattr(feed, 'feed') and hasattr(feed.feed, 'link') else feed_url
+                },
+                "stats": {
+                    "total_available": total_entries,
+                    "processed": len(processed_entries),
+                    "skipped": skipped_count
                 }
             }
         
