@@ -166,6 +166,17 @@ def update_general_settings(settings):
     for key, value in settings.items():
         config["global_settings"]["general_settings"][key] = value
     
+    # 如果更改了开机自启动设置，则需要实际应用该设置
+    if "start_on_boot" in settings:
+        try:
+            from core.autostart import enable_autostart, disable_autostart
+            if settings["start_on_boot"]:
+                enable_autostart()
+            else:
+                disable_autostart()
+        except Exception as e:
+            logger.error(f"应用开机自启动设置时出错: {str(e)}")
+    
     # 输出调试信息，确认设置已更新
     print(f"更新后的通用设置: {config['global_settings']['general_settings']}")
     

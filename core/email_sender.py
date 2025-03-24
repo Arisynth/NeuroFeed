@@ -60,15 +60,15 @@ class EmailSender:
             logger.error(error_msg)
             return {recipient: {"status": "fail", "error": error_msg} for recipient in recipients}
         
-        # 按源分组内容
-        grouped_contents = self._group_by_source(contents)
+        # 对内容进行排序，而不是按源分组
+        sorted_contents = self._sort_contents(contents)
         
         # 创建邮件主题
         current_date = datetime.now().strftime("%Y年%m月%d日")
         subject = f"NewsDigest - {task_name} 新闻简报 ({current_date})"
         
         # 创建HTML邮件内容
-        html_content = self._create_html_digest(grouped_contents, task_name, current_date)
+        html_content = self._create_html_digest(sorted_contents, task_name, current_date)
         
         # 发送邮件并跟踪状态
         results = {}
@@ -139,20 +139,34 @@ class EmailSender:
             logger.error(error_msg)
             raise EmailSendError(error_msg)
     
-    def _group_by_source(self, contents: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
-        """将内容按照来源分组"""
-        grouped_contents = {}
+    def _sort_contents(self, contents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """根据重要性、时效性和趣味性对内容进行排序
         
-        for content in contents:
-            source = content.get("source", "未知来源")
-            if source not in grouped_contents:
-                grouped_contents[source] = []
+        排序优先级：重要性 > 时效性 > 趣味性 > 获取时间
+        """
+        def get_sort_key(item):
+            # 从评估结果中获取排序指标，如果缺失则提供默认值
+            evaluation = item.get("evaluation", {})
             
-            grouped_contents[source].append(content)
+            # 获取重要性分数（0-10，值越高越重要）
+            importance = evaluation.get("importance", 5)
+            
+            # 获取时效性分数（0-10，值越高表示越及时）
+            timeliness = evaluation.get("timeliness", 5)
+            
+            # 获取趣味性分数（0-10，值越高表示越有趣）
+            interest = evaluation.get("interest", 5)
+            
+            # 获取发布/获取时间，如果没有则使用当前时间
+            pub_time = item.get("pub_date", datetime.now().isoformat())
+            
+            # 返回排序键（负值使得大值排在前面）
+            return (-importance, -timeliness, -interest, pub_time)
         
-        return grouped_contents
+        # 对内容列表进行排序并返回
+        return sorted(contents, key=get_sort_key)
     
-    def _create_html_digest(self, grouped_contents: Dict[str, List[Dict[str, Any]]], 
+    def _create_html_digest(self, sorted_contents: List[Dict[str, Any]], 
                            task_name: str, date_str: str) -> str:
         """创建HTML格式的邮件内容"""
         # 使用内联CSS的样式
@@ -162,11 +176,14 @@ class EmailSender:
             .header { background-color: #2c3e50; color: white; padding: 20px; text-align: center; }
             .header h1 { margin: 0; font-size: 24px; }
             .header p { margin: 5px 0 0; font-size: 16px; }
-            .source { background-color: #f8f9fa; border-left: 4px solid #2c3e50; padding: 10px; margin: 20px 0 10px; }
-            .source h2 { margin: 0; font-size: 20px; color: #2c3e50; }
-            .news-item { padding: 10px 10px 10px 20px; margin-bottom: 15px; border-bottom: 1px solid #eee; }
+            .news-section { margin: 20px 0; }
+            .news-item { padding: 15px; margin-bottom: 15px; border-bottom: 1px solid #eee; }
             .news-item:last-child { border-bottom: none; }
             .news-item h3 { margin: 0 0 10px; font-size: 18px; }
+            .news-item .meta { display: flex; font-size: 13px; color: #7f8c8d; margin-bottom: 10px; }
+            .news-item .source { font-weight: bold; margin-right: 10px; color: #2c3e50; }
+            .news-item .rating { display: flex; margin-right: 10px; }
+            .news-item .rating .star { color: #f39c12; margin-right: 2px; }
             .news-item .category { display: inline-block; background-color: #e9ecef; padding: 2px 6px; border-radius: 3px; font-size: 12px; margin-left: 5px; }
             .news-item .content { margin: 10px 0; }
             .news-item .link { text-decoration: none; color: #3498db; font-weight: bold; }
@@ -189,48 +206,56 @@ class EmailSender:
                 <h1>NewsDigest - {task_name}</h1>
                 <p>{date_str} 新闻简报</p>
             </div>
+            <div class="news-section">
         """
         
-        # 为每个来源添加内容
-        for source, contents in grouped_contents.items():
+        # 添加排序后的所有新闻
+        for content in sorted_contents:
+            title = content.get("title", "无标题")
+            news_brief = content.get("news_brief", "无内容")
+            link = content.get("link", "#")
+            source = content.get("source", "未知来源")
+            
+            # 获取评估数据，用于显示重要性等级
+            evaluation = content.get("evaluation", {})
+            importance = evaluation.get("importance", 5)
+            
+            # 构建重要性星级显示
+            importance_stars = ""
+            if importance > 0:
+                # 将1-10分转换为1-5星
+                star_count = min(5, max(1, round(importance / 2)))
+                importance_stars = '<div class="rating">' + '<span class="star">★</span>' * star_count + '</div>'
+            
+            # 标签获取逻辑
+            tags = []
+            if "evaluation" in content and "interest_match" in content["evaluation"]:
+                matched_tags = content["evaluation"]["interest_match"].get("matched_tags", [])
+                if matched_tags:
+                    tags = matched_tags
+            elif "feed_labels" in content and content["feed_labels"]:
+                tags = content["feed_labels"]
+            
+            # 构建分类标签HTML
+            categories_html = ""
+            for tag in tags:
+                categories_html += f'<span class="category">{tag}</span>'
+            
             html += f"""
-            <div class="source">
-                <h2>{source}</h2>
+            <div class="news-item">
+                <h3>{title} {categories_html}</h3>
+                <div class="meta">
+                    <span class="source">来源: {source}</span>
+                    {importance_stars}
+                </div>
+                <div class="content">{news_brief}</div>
+                <a href="{link}" class="link" target="_blank">阅读原文</a>
             </div>
             """
-            
-            # 添加该来源的所有新闻
-            for content in contents:
-                title = content.get("title", "无标题")
-                news_brief = content.get("news_brief", "无内容")
-                link = content.get("link", "#")
-                
-                # 修改标签获取逻辑，优先使用AI评估的匹配标签
-                tags = []
-                # 优先尝试从AI评估结果中获取匹配的标签
-                if "evaluation" in content and "interest_match" in content["evaluation"]:
-                    matched_tags = content["evaluation"]["interest_match"].get("matched_tags", [])
-                    if matched_tags:
-                        tags = matched_tags
-                # 如果AI评估没有产生标签，再尝试使用RSS源的标签
-                elif "feed_labels" in content and content["feed_labels"]:
-                    tags = content["feed_labels"]
-                
-                # 构建分类标签HTML
-                categories_html = ""
-                for tag in tags:
-                    categories_html += f'<span class="category">{tag}</span>'
-                
-                html += f"""
-                <div class="news-item">
-                    <h3>{title} {categories_html}</h3>
-                    <div class="content">{news_brief}</div>
-                    <a href="{link}" class="link" target="_blank">阅读原文</a>
-                </div>
-                """
         
         # 添加页脚
         html += f"""
+            </div>
             <div class="footer">
                 <p>此邮件由NewsDigest自动生成 - {date_str}</p>
             </div>
@@ -239,6 +264,19 @@ class EmailSender:
         """
         
         return html
+    
+    def _group_by_source(self, contents: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        """将内容按照来源分组"""
+        grouped_contents = {}
+        
+        for content in contents:
+            source = content.get("source", "未知来源")
+            if source not in grouped_contents:
+                grouped_contents[source] = []
+            
+            grouped_contents[source].append(content)
+        
+        return grouped_contents
     
     def send_test_email(self, recipient: str) -> Tuple[bool, str]:
         """发送测试邮件"""

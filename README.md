@@ -10,6 +10,7 @@ NeuroFeed is an intelligent RSS feed aggregator that collects news from various 
 - User-friendly GUI with system tray integration
 - Configurable preferences
 - Support for both OpenAI and local Ollama models
+- Automatic startup on system boot
 
 ## Installation
 

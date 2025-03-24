@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
                            QTableWidgetItem, QHeaderView, QPushButton, QLabel,
                            QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QIcon
 from gui.dialogs.feed_config_dialog import FeedConfigDialog
 from datetime import datetime
 
@@ -25,6 +25,9 @@ class FeedManager(QWidget):
         feed_section_label.setStyleSheet("font-weight: bold;")
         layout.addWidget(feed_section_label)
         
+        # Create container for table and order buttons
+        table_container = QHBoxLayout()
+        
         # Feed table
         self.feed_table = QTableWidget(0, 5)  # URL, Items Count, Labels, Status, Last Fetch Time
         self.feed_table.setHorizontalHeaderLabels(["Feed URL", "Items", "Labels", "Status", "Last Fetch Time"])
@@ -34,7 +37,31 @@ class FeedManager(QWidget):
         self.feed_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         self.feed_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         self.feed_table.cellDoubleClicked.connect(self.on_feed_double_clicked)
-        layout.addWidget(self.feed_table)
+        table_container.addWidget(self.feed_table)
+        
+        # Add order buttons in vertical layout
+        order_buttons = QVBoxLayout()
+        
+        # Move up button
+        self.move_up_btn = QPushButton("▲")
+        self.move_up_btn.setToolTip("Move feed up")
+        self.move_up_btn.clicked.connect(self.move_feed_up)
+        order_buttons.addWidget(self.move_up_btn)
+        
+        # Move down button
+        self.move_down_btn = QPushButton("▼")
+        self.move_down_btn.setToolTip("Move feed down")
+        self.move_down_btn.clicked.connect(self.move_feed_down)
+        order_buttons.addWidget(self.move_down_btn)
+        
+        # Add spacing
+        order_buttons.addStretch()
+        
+        # Add order buttons to container
+        table_container.addLayout(order_buttons)
+        
+        # Add table container to main layout
+        layout.addLayout(table_container)
         
         # Feed controls
         controls_layout = QHBoxLayout()
@@ -234,3 +261,51 @@ class FeedManager(QWidget):
                 QMessageBox.information(self, "Feed Test", f"Successfully fetched feed: {feed_url}")
             else:
                 QMessageBox.warning(self, "Feed Test", f"Failed to fetch feed: {feed_url}")
+    
+    def move_feed_up(self):
+        """Move the selected feed up in the list"""
+        if not self.current_task:
+            return
+            
+        current_row = self.feed_table.currentRow()
+        if current_row > 0:
+            # Swap items in the task's rss_feeds list
+            self.current_task.rss_feeds[current_row], self.current_task.rss_feeds[current_row-1] = \
+                self.current_task.rss_feeds[current_row-1], self.current_task.rss_feeds[current_row]
+            
+            # Save task to update config.json
+            from core.config_manager import save_task
+            save_task(self.current_task)
+            
+            # Update the table display
+            self.update_feed_table()
+            
+            # Keep the moved item selected
+            self.feed_table.selectRow(current_row - 1)
+            
+            # Emit signal that feeds have been updated
+            self.feed_updated.emit()
+    
+    def move_feed_down(self):
+        """Move the selected feed down in the list"""
+        if not self.current_task:
+            return
+            
+        current_row = self.feed_table.currentRow()
+        if current_row >= 0 and current_row < len(self.current_task.rss_feeds) - 1:
+            # Swap items in the task's rss_feeds list
+            self.current_task.rss_feeds[current_row], self.current_task.rss_feeds[current_row+1] = \
+                self.current_task.rss_feeds[current_row+1], self.current_task.rss_feeds[current_row]
+            
+            # Save task to update config.json
+            from core.config_manager import save_task
+            save_task(self.current_task)
+            
+            # Update the table display
+            self.update_feed_table()
+            
+            # Keep the moved item selected
+            self.feed_table.selectRow(current_row + 1)
+            
+            # Emit signal that feeds have been updated
+            self.feed_updated.emit()
