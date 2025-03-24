@@ -173,5 +173,23 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# data files
-data/
+# data db
+data/rss_news.db
+
+# Configuration with sensitive data
+data/config.json
+
+# Database files
+*.db
+*.sqlite
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+.DS_Store

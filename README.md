@@ -1,24 +1,29 @@
-# NewsDigest
+# NeuroFeed
 
-NewsDigest is an intelligent RSS feed aggregator that collects news from various sources, processes them with AI to generate summaries, and sends personalized email digests to users.
+NeuroFeed is an intelligent RSS feed aggregator that collects news from various sources, processes them with AI to generate summaries, and sends personalized email digests to users. SmartDigest is a feature within NeuroFeed that handles the content filtering and summarization.
 
 ## Features
 
 - Collect news from multiple RSS feeds
-- AI-powered article summarization and ranking
+- AI-powered article filtering, ranking, and summarization
 - Customizable email delivery scheduling
 - User-friendly GUI with system tray integration
 - Configurable preferences
+- Support for both OpenAI and local Ollama models
 
 ## Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/iasonyc/NewsDigest.git
-cd NewsDigest
+git clone https://github.com/iasonyc/NeuroFeed.git
+cd NeuroFeed
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Set up configuration
+cp data/config.template.json data/config.json
+# Edit data/config.json with your settings
 ```
 
 ## Usage
@@ -31,7 +36,7 @@ python main.py
 ## Project Structure
 
 ```
-NewsDigest/
+NeuroFeed/
 ├── main.py                 # Application entry point
 ├── gui/                    # GUI components
 │   ├── __init__.py         # Package initialization

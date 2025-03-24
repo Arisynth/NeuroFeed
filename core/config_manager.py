@@ -1,10 +1,64 @@
 import json
 import os
 import uuid
+import shutil
+import logging
 
-CONFIG_PATH = "data/config.json"
+logger = logging.getLogger(__name__)
+
+CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
+TEMPLATE_PATH = os.path.join(CONFIG_DIR, "config.template.json")
+
+def initialize_config():
+    """Initialize the configuration file if it doesn't exist"""
+    # Create config directory if it doesn't exist
+    if not os.path.exists(CONFIG_DIR):
+        os.makedirs(CONFIG_DIR)
+        logger.info(f"Created configuration directory: {CONFIG_DIR}")
+        
+    # Check if config file exists
+    if not os.path.exists(CONFIG_PATH):
+        if os.path.exists(TEMPLATE_PATH):
+            # Copy template to actual config file
+            shutil.copy(TEMPLATE_PATH, CONFIG_PATH)
+            logger.info(f"Created initial configuration from template")
+        else:
+            # Create a minimal default config
+            default_config = {
+                "tasks": [],
+                "global_settings": {
+                    "email_settings": {
+                        "smtp_server": "",
+                        "smtp_port": 465,
+                        "smtp_security": "SSL/TLS",
+                        "sender_email": "",
+                        "email_password": "",
+                        "remember_password": False
+                    },
+                    "ai_settings": {
+                        "provider": "ollama",
+                        "ollama_host": "http://localhost:11434",
+                        "ollama_model": "model-name",
+                        "openai_model": "gpt-3.5-turbo"
+                    },
+                    "general_settings": {
+                        "start_on_boot": True,
+                        "minimize_to_tray": True,
+                        "show_notifications": True,
+                        "skip_processed_articles": True
+                    },
+                    "user_interests": []
+                }
+            }
+            with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+                json.dump(default_config, f, indent=4, ensure_ascii=False)
+            logger.info(f"Created default configuration file")
 
 def load_config():
+    """Load configuration from file, initializing if necessary"""
+    initialize_config()
+    
     try:
         if os.path.exists(CONFIG_PATH) and os.path.getsize(CONFIG_PATH) > 0:
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:

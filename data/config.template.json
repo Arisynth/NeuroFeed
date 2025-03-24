@@ -1,0 +1,69 @@
+{
+    "tasks": [
+        {
+            "task_id": "example-task-id",
+            "name": "Example Task",
+            "rss_feeds": [
+                "https://example.com/rss",
+                "https://another-example.com/feed"
+            ],
+            "schedule": {
+                "type": "daily",
+                "time": "08:00"
+            },
+            "recipients": [
+                "user@example.com"
+            ],
+            "ai_settings": {
+                "summary_length": "medium"
+            },
+            "feeds_status": {},
+            "recipients_status": {},
+            "last_run": null,
+            "feed_config": {
+                "https://example.com/rss": {
+                    "items_count": 5,
+                    "labels": [
+                        "tech",
+                        "news"
+                    ]
+                },
+                "https://another-example.com/feed": {
+                    "items_count": 10,
+                    "labels": [
+                        "science",
+                        "tech"
+                    ]
+                }
+            }
+        }
+    ],
+    "global_settings": {
+        "email_settings": {
+            "smtp_server": "smtp.example.com",
+            "smtp_port": 465,
+            "smtp_security": "SSL/TLS",
+            "sender_email": "sender@example.com",
+            "email_password": "",
+            "remember_password": false
+        },
+        "ai_settings": {
+            "provider": "ollama",
+            "ollama_host": "http://localhost:11434",
+            "ollama_model": "model-name",
+            "openai_model": "gpt-3.5-turbo"
+        },
+        "general_settings": {
+            "start_on_boot": true,
+            "minimize_to_tray": true,
+            "show_notifications": true,
+            "skip_processed_articles": true
+        },
+        "user_interests": [
+            "news",
+            "tech",
+            "science",
+            "business"
+        ]
+    }
+}
