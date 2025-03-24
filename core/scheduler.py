@@ -347,22 +347,64 @@ def setup_scheduled_tasks():
     task_count = 0
     for task in tasks:
         task_schedule = task.schedule
-        schedule_type = task_schedule.get("type", "daily")
+        if not task_schedule:
+            logger.warning(f"任务 {task.name} (ID: {task.task_id}) 没有调度信息，跳过")
+            continue
         
-        if schedule_type == "daily":
-            # 每日执行
-            time_str = task_schedule.get("time", "08:00")
-            logger.info(f"设置任务 {task.name} (ID: {task.task_id}) 每日 {time_str} 执行")
-            
-            # 创建闭包保存task_id
-            def create_job(task_id):
-                return lambda: execute_task(task_id)
-            
-            # 添加到定时任务
-            schedule.every().day.at(time_str).do(create_job(task.task_id))
-            task_count += 1
+        # 获取调度参数
+        weeks = task_schedule.get("weeks", 1)  # 默认每周执行
+        time_str = task_schedule.get("time", "08:00")  # 默认上午8点
+        days = task_schedule.get("days", list(range(7)))  # 默认所有天
         
-        # 可以添加更多类型的定时 (weekly, hourly等)
+        if not days:
+            logger.warning(f"任务 {task.name} (ID: {task.task_id}) 没有选择任何天，跳过调度")
+            continue
+        
+        # 创建闭包保存task_id
+        def create_job(task_id):
+            return lambda: execute_task(task_id)
+        
+        # 检查上次运行时间，以支持多周运行一次的情况
+        job_restricted = False
+        if weeks > 1 and task.last_run:
+            try:
+                last_run = datetime.fromisoformat(task.last_run)
+                now = datetime.now()
+                days_since_last_run = (now - last_run).days
+                
+                # 如果距离上次运行未满配置的周数，暂不调度
+                if days_since_last_run < weeks * 7 - 1:  # -1是为了避免临界情况
+                    logger.info(f"任务 {task.name} (ID: {task.task_id}) 配置为每 {weeks} 周运行一次，"
+                               f"距离上次运行仅过去 {days_since_last_run} 天, 暂时不调度")
+                    job_restricted = True
+            except Exception as e:
+                logger.error(f"处理多周运行一次任务时出错: {str(e)}")
+        
+        # 如果没有限制，为每个选定的天添加调度
+        if not job_restricted:
+            # 日期名称映射
+            day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            day_methods = [
+                schedule.every().monday,
+                schedule.every().tuesday,
+                schedule.every().wednesday,
+                schedule.every().thursday,
+                schedule.every().friday,
+                schedule.every().saturday,
+                schedule.every().sunday
+            ]
+            
+            for day_index in days:
+                if day_index < 0 or day_index > 6:
+                    logger.warning(f"忽略无效的星期日索引: {day_index}")
+                    continue
+                
+                day_name = day_names[day_index]
+                day_method = day_methods[day_index]
+                
+                logger.info(f"设置任务 {task.name} (ID: {task.task_id}) 在{day_name} {time_str} 执行")
+                day_method.at(time_str).do(create_job(task.task_id))
+                task_count += 1
     
     logger.info(f"定时任务设置完成，共 {task_count} 个任务被调度")
     

@@ -1,102 +1,18 @@
 from PyQt6.QtWidgets import (QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, 
-                            QListWidget, QPushButton, QWidget, QInputDialog, 
-                            QMessageBox, QDialog, QComboBox, QFormLayout,
-                            QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView,
-                            QSpinBox, QDialogButtonBox, QLineEdit)
+                           QWidget, QPushButton, QTabWidget, QMessageBox)
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor
-from core.config_manager import load_config, save_config, get_tasks, save_task, delete_task
-from core.task_model import Task
-from datetime import datetime
-from gui.tag_editor import TagEditor
 from core.scheduler import run_task_now
-
-class FeedConfigDialog(QDialog):
-    """Dialog to configure RSS feed settings"""
-    def __init__(self, parent=None, feed_url="", items_count=10, labels=None):
-        super().__init__(parent)
-        self.setWindowTitle("RSS Feed Configuration")
-        self.resize(550, 280)  # 稍微减小窗口宽度
-        
-        layout = QVBoxLayout(self)
-        
-        form_layout = QFormLayout()
-        # 设置标签左对齐，但字段不对齐，直接跟在标签后面
-        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        
-        self.url_input = QLineEdit(feed_url)
-        self.url_input.setMinimumWidth(400)  # 确保URL输入框足够宽
-        
-        self.count_input = QSpinBox()
-        self.count_input.setRange(1, 100)
-        self.count_input.setValue(items_count)
-        self.count_input.setFixedWidth(80)
-        self.count_input.setSuffix(" items")
-        
-        form_layout.addRow("RSS Feed URL:", self.url_input)
-        form_layout.addRow("Number of news items to fetch:", self.count_input)
-        
-        # 标签区域标题，移除加粗
-        labels_label = QLabel("Interest Tags:")
-        
-        # 使用2行高的标签编辑器
-        self.tag_editor = TagEditor(rows=2)
-        if labels:
-            self.tag_editor.set_tags(labels)
-        
-        layout.addLayout(form_layout)
-        layout.addWidget(labels_label)
-        layout.addWidget(self.tag_editor)
-        
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        ok_button = buttons.button(QDialogButtonBox.StandardButton.Ok)
-        if (ok_button):
-            ok_button.setAutoDefault(False)
-            ok_button.setDefault(False)
-        
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        
-        layout.addWidget(buttons)
-    
-    def keyPressEvent(self, event):
-        """处理按键事件，阻止回车键关闭对话框"""
-        if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
-            # 如果焦点在输入框上，添加新标签而不关闭对话框
-            if self.tag_editor.tag_input.hasFocus():
-                self.tag_editor.add_current_tag()
-                event.accept()
-                return
-        # 其他情况，调用父类处理
-        super().keyPressEvent(event)
-    
-    def get_feed_url(self):
-        return self.url_input.text()
-    
-    def get_items_count(self):
-        return self.count_input.value()
-    
-    def get_labels(self):
-        return self.tag_editor.get_tags()
+from gui.components.task_manager import TaskManager
+from gui.components.feed_manager import FeedManager
+from gui.components.recipient_manager import RecipientManager
+from gui.components.scheduler_manager import SchedulerManager
+from core.config_manager import save_task
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("NewsDigest")
         self.setMinimumSize(800, 500)
-        
-        # Load tasks from config
-        self.tasks = get_tasks()
-        self.current_task = None
-        if (self.tasks):
-            self.current_task = self.tasks[0]
-        else:
-            # Create default task if none exists
-            self.current_task = Task(name="Default Task")
-            save_task(self.current_task)
-            self.tasks = [self.current_task]
         
         # Create central widget and main layout
         central_widget = QWidget()
@@ -109,116 +25,27 @@ class MainWindow(QMainWindow):
         title_label.setStyleSheet("font-size: 18px; font-weight: bold; margin-bottom: 15px;")
         main_layout.addWidget(title_label)
         
-        # Task selection section
-        task_selection_layout = QHBoxLayout()
-        task_selection_layout.addWidget(QLabel("Select Task:"))
-        
-        self.task_selector = QComboBox()
-        self.update_task_list()
-        self.task_selector.currentIndexChanged.connect(self.on_task_changed)
-        task_selection_layout.addWidget(self.task_selector, 1)
-        
-        self.add_task_btn = QPushButton("Add Task")
-        self.edit_task_btn = QPushButton("Edit Task")
-        self.delete_task_btn = QPushButton("Delete Task")
-        
-        self.add_task_btn.clicked.connect(self.add_task)
-        self.edit_task_btn.clicked.connect(self.edit_task)
-        self.delete_task_btn.clicked.connect(self.delete_task)
-        
-        task_selection_layout.addWidget(self.add_task_btn)
-        task_selection_layout.addWidget(self.edit_task_btn)
-        task_selection_layout.addWidget(self.delete_task_btn)
-        
-        main_layout.addLayout(task_selection_layout)
+        # Create task manager
+        self.task_manager = TaskManager()
+        self.task_manager.task_changed.connect(self.on_task_changed)
+        main_layout.addWidget(self.task_manager)
         
         # Task details section with tabs
         self.tabs = QTabWidget()
         
-        # Tab 1: RSS Feeds
-        self.feeds_tab = QWidget()
-        feeds_layout = QVBoxLayout(self.feeds_tab)
+        # Tab 1: RSS Feeds - using FeedManager
+        self.feed_manager = FeedManager()
+        self.tabs.addTab(self.feed_manager, "RSS Feeds")
         
-        feed_section_label = QLabel("RSS Feeds for this Task:")
-        feed_section_label.setStyleSheet("font-weight: bold;")
-        feeds_layout.addWidget(feed_section_label)
+        # Tab 2: Scheduling - using SchedulerManager
+        self.scheduler_manager = SchedulerManager()
+        self.tabs.addTab(self.scheduler_manager, "Schedule")
         
-        # RSS feed table with status
-        self.feed_table = QTableWidget(0, 3)  # Rows will be added dynamically, 3 columns
-        self.feed_table.setHorizontalHeaderLabels(["Feed URL", "Status", "Last Fetch Time"])
-        self.feed_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.feed_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self.feed_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        
-        # Feed control buttons
-        feed_controls_layout = QHBoxLayout()
-        self.add_feed_btn = QPushButton("Add Feed")
-        self.edit_feed_btn = QPushButton("Edit Feed")  # New button
-        self.remove_feed_btn = QPushButton("Remove Feed")
-        self.test_feed_btn = QPushButton("Test Feed")  # Added test feed button
-        
-        self.add_feed_btn.clicked.connect(self.add_feed)
-        self.edit_feed_btn.clicked.connect(self.edit_feed)  # Connect new button
-        self.remove_feed_btn.clicked.connect(self.remove_feed)
-        self.test_feed_btn.clicked.connect(self.test_feed)
-        
-        feed_controls_layout.addWidget(self.add_feed_btn)
-        feed_controls_layout.addWidget(self.edit_feed_btn)  # Add new button
-        feed_controls_layout.addWidget(self.remove_feed_btn)
-        feed_controls_layout.addWidget(self.test_feed_btn)
-        feed_controls_layout.addStretch()
-        
-        feeds_layout.addWidget(self.feed_table)
-        feeds_layout.addLayout(feed_controls_layout)
-        
-        # Tab 2: Scheduling (placeholder)
-        self.schedule_tab = QWidget()
-        schedule_layout = QVBoxLayout(self.schedule_tab)
-        schedule_layout.addWidget(QLabel("Schedule settings will be implemented here"))
-        
-        # Tab 3: Recipients
-        self.recipients_tab = QWidget()
-        recipients_layout = QVBoxLayout(self.recipients_tab)
-        
-        recipient_section_label = QLabel("Email Recipients:")
-        recipient_section_label.setStyleSheet("font-weight: bold;")
-        recipients_layout.addWidget(recipient_section_label)
-        
-        # Recipients table with status
-        self.recipient_table = QTableWidget(0, 3)  # Rows will be added dynamically, 3 columns
-        self.recipient_table.setHorizontalHeaderLabels(["Email Address", "Status", "Last Sent Time"])
-        self.recipient_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.recipient_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self.recipient_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        
-        # Recipient control buttons
-        recipient_controls_layout = QHBoxLayout()
-        self.add_recipient_btn = QPushButton("Add Recipient")
-        self.remove_recipient_btn = QPushButton("Remove Recipient")
-        self.test_recipient_btn = QPushButton("Test Email")  # Added test email button
-        
-        self.add_recipient_btn.clicked.connect(self.add_recipient)
-        self.remove_recipient_btn.clicked.connect(self.remove_recipient)
-        self.test_recipient_btn.clicked.connect(self.test_recipient)
-        
-        recipient_controls_layout.addWidget(self.add_recipient_btn)
-        recipient_controls_layout.addWidget(self.remove_recipient_btn)
-        recipient_controls_layout.addWidget(self.test_recipient_btn)
-        recipient_controls_layout.addStretch()
-        
-        recipients_layout.addWidget(self.recipient_table)
-        recipients_layout.addLayout(recipient_controls_layout)
-        
-        # Add tabs to tab widget
-        self.tabs.addTab(self.feeds_tab, "RSS Feeds")
-        self.tabs.addTab(self.schedule_tab, "Schedule")
-        self.tabs.addTab(self.recipients_tab, "Recipients")
+        # Tab 3: Recipients - using RecipientManager
+        self.recipient_manager = RecipientManager()
+        self.tabs.addTab(self.recipient_manager, "Recipients")
         
         main_layout.addWidget(self.tabs)
-        
-        # Last run status
-        self.last_run_label = QLabel("Last run: Never")
-        main_layout.addWidget(self.last_run_label)
         
         # Action buttons section
         buttons_layout = QHBoxLayout()
@@ -234,375 +61,66 @@ class MainWindow(QMainWindow):
         
         main_layout.addLayout(buttons_layout)
         
-        # 添加双击信号连接
-        self.feed_table.cellDoubleClicked.connect(self.on_feed_double_clicked)
+        # 一定要初始化任务，否则组件不会显示任务信息
+        if self.task_manager.current_task:
+            self.on_task_changed(self.task_manager.current_task)
         
-        # Update UI with current task
-        self.update_ui_from_task()
+        # 打印日志确认主窗口已正确初始化
+        print("主窗口初始化完成")
     
-    def update_task_list(self):
-        """Update the task selector dropdown"""
-        self.task_selector.clear()
-        for task in self.tasks:
-            self.task_selector.addItem(task.name, task.task_id)
-    
-    def on_task_changed(self, index):
-        """Handle task selection change"""
-        if index >= 0 and index < len(self.tasks):
-            self.current_task = self.tasks[index]
-            self.update_ui_from_task()
-    
-    def update_ui_from_task(self):
-        """Update all UI elements from the current task"""
-        if not self.current_task:
+    def on_task_changed(self, task):
+        """Handle task changes from task manager"""
+        if not task:
+            print("警告: 收到空任务对象")
             return
             
-        # Update feed table
-        self.update_feed_table()
+        print(f"任务已更改: {task.name} (ID: {task.task_id})")
         
-        # Update recipient table
-        self.update_recipient_table()
-        
-        # Update last run label
-        if self.current_task.last_run:
-            try:
-                last_run_datetime = datetime.fromisoformat(self.current_task.last_run)
-                formatted_time = last_run_datetime.strftime("%Y-%m-%d %H:%M:%S")
-                self.last_run_label.setText(f"Last run: {formatted_time}")
-            except (ValueError, TypeError):
-                self.last_run_label.setText("Last run: Unknown format")
-        else:
-            self.last_run_label.setText("Last run: Never")
-    
-    def update_feed_table(self):
-        """Update the RSS feed table with current task's feeds and their status"""
-        if not self.current_task:
-            return
-            
-        self.feed_table.setRowCount(0)  # Clear existing rows
-        self.feed_table.setColumnCount(5)  # URL, Items Count, Labels, Status, Last Fetch Time
-        self.feed_table.setHorizontalHeaderLabels(["Feed URL", "Items", "Labels", "Status", "Last Fetch Time"])
-        self.feed_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.feed_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self.feed_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        self.feed_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        self.feed_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        
-        for row, feed_url in enumerate(self.current_task.rss_feeds):
-            self.feed_table.insertRow(row)
-            
-            # Feed URL
-            url_item = QTableWidgetItem(feed_url)
-            url_item.setFlags(url_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # 设置为不可编辑
-            self.feed_table.setItem(row, 0, url_item)
-            
-            # Items count
-            items_count = self.current_task.get_feed_items_count(feed_url)
-            count_item = QTableWidgetItem(str(items_count))
-            count_item.setFlags(count_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # 设置为不可编辑
-            self.feed_table.setItem(row, 1, count_item)
-            
-            # Labels - 限制显示数量
-            labels = self.current_task.get_feed_labels(feed_url)
-            labels_text = ""
-            if labels:
-                if len(labels) <= 3:
-                    labels_text = ", ".join(labels)
-                else:
-                    labels_text = ", ".join(labels[:3]) + "..."
-                    
-            labels_item = QTableWidgetItem(labels_text)
-            labels_item.setFlags(labels_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # 设置为不可编辑
-            self.feed_table.setItem(row, 2, labels_item)
-            
-            # Status
-            status_info = self.current_task.feeds_status.get(feed_url, {})
-            status = status_info.get("status", "unknown")
-            status_item = QTableWidgetItem(status)
-            status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # 设置为不可编辑
-            
-            # Set color based on status
-            if status == "success":
-                status_item.setForeground(QColor("green"))
-            elif status == "fail":
-                status_item.setForeground(QColor("red"))
-                
-            self.feed_table.setItem(row, 3, status_item)
-            
-            # Last fetch time
-            last_fetch = status_info.get("last_fetch", "Never")
-            if last_fetch != "Never":
-                try:
-                    fetch_datetime = datetime.fromisoformat(last_fetch)
-                    last_fetch = fetch_datetime.strftime("%Y-%m-%d %H:%M:%S")
-                except (ValueError, TypeError):
-                    last_fetch = "Invalid format"
-                    
-            time_item = QTableWidgetItem(last_fetch)
-            time_item.setFlags(time_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # 设置为不可编辑
-            self.feed_table.setItem(row, 4, time_item)
-    
-    def on_feed_double_clicked(self, row, column):
-        """处理双击Feed表格事件，打开编辑对话框"""
-        self.edit_feed()  # 复用现有的编辑功能
-    
-    def update_recipient_table(self):
-        """Update the recipients table with current task's recipients and their status"""
-        if not self.current_task:
-            return
-            
-        self.recipient_table.setRowCount(0)  # Clear existing rows
-        
-        for row, email in enumerate(self.current_task.recipients):
-            self.recipient_table.insertRow(row)
-            
-            # Email address
-            email_item = QTableWidgetItem(email)
-            self.recipient_table.setItem(row, 0, email_item)
-            
-            # Status
-            status_info = self.current_task.recipients_status.get(email, {})
-            status = status_info.get("status", "unknown")
-            status_item = QTableWidgetItem(status)
-            
-            # Set color based on status
-            if status == "success":
-                status_item.setForeground(QColor("green"))
-            elif status == "fail":
-                status_item.setForeground(QColor("red"))
-                
-            self.recipient_table.setItem(row, 1, status_item)
-            
-            # Last sent time
-            last_sent = status_info.get("last_sent", "Never")
-            if last_sent != "Never":
-                try:
-                    sent_datetime = datetime.fromisoformat(last_sent)
-                    last_sent = sent_datetime.strftime("%Y-%m-%d %H:%M:%S")
-                except (ValueError, TypeError):
-                    last_sent = "Invalid format"
-                    
-            time_item = QTableWidgetItem(last_sent)
-            self.recipient_table.setItem(row, 2, time_item)
-    
-    def add_feed(self):
-        """Add a new RSS feed to the current task"""
-        if not self.current_task:
-            return
-            
-        # 获取用户默认标签
-        config = load_config()
-        default_labels = config.get("global_settings", {}).get("user_interests", [])
-        
-        dialog = FeedConfigDialog(self, labels=default_labels)
-        if dialog.exec():
-            feed_url = dialog.get_feed_url()
-            items_count = dialog.get_items_count()
-            labels = dialog.get_labels()
-            
-            if feed_url:
-                self.current_task.rss_feeds.append(feed_url)
-                self.current_task.set_feed_items_count(feed_url, items_count)
-                self.current_task.set_feed_labels(feed_url, labels)
-                save_task(self.current_task)
-                self.update_feed_table()
-    
-    def edit_feed(self):
-        """Edit the selected RSS feed settings"""
-        if not self.current_task:
-            return
-            
-        current_row = self.feed_table.currentRow()
-        if current_row >= 0:
-            feed_url = self.current_task.rss_feeds[current_row]
-            items_count = self.current_task.get_feed_items_count(feed_url)
-            labels = self.current_task.get_feed_labels(feed_url)
-            
-            dialog = FeedConfigDialog(self, feed_url, items_count, labels)
-            if dialog.exec():
-                new_url = dialog.get_feed_url()
-                new_count = dialog.get_items_count()
-                new_labels = dialog.get_labels()
-                
-                # Keep feed status if URL doesn't change
-                if new_url != feed_url:
-                    self.current_task.rss_feeds[current_row] = new_url
-                    
-                    # If URL changed, update config with new URL
-                    if feed_url in self.current_task.feed_config:
-                        config = self.current_task.feed_config.pop(feed_url)
-                        self.current_task.feed_config[new_url] = config
-                
-                # Update items count and labels
-                self.current_task.set_feed_items_count(new_url, new_count)
-                self.current_task.set_feed_labels(new_url, new_labels)
-                save_task(self.current_task)
-                self.update_feed_table()
-    
-    def remove_feed(self):
-        """Remove selected RSS feed from the current task"""
-        if not self.current_task:
-            return
-            
-        current_row = self.feed_table.currentRow()
-        if current_row >= 0:
-            del self.current_task.rss_feeds[current_row]
-            save_task(self.current_task)
-            self.update_feed_table()
-    
-    def test_feed(self):
-        """Test the selected RSS feed"""
-        if not self.current_task:
-            return
-            
-        current_row = self.feed_table.currentRow()
-        if current_row >= 0:
-            feed_url = self.current_task.rss_feeds[current_row]
-            
-            # TODO: Implement actual RSS feed testing
-            # For now, just simulate success/failure randomly
-            import random
-            status = "success" if random.random() > 0.3 else "fail"
-            
-            self.current_task.update_feed_status(feed_url, status)
-            save_task(self.current_task)
-            self.update_feed_table()
-            
-            if status == "success":
-                QMessageBox.information(self, "Feed Test", f"Successfully fetched feed: {feed_url}")
-            else:
-                QMessageBox.warning(self, "Feed Test", f"Failed to fetch feed: {feed_url}")
-    
-    def add_recipient(self):
-        """Add a new email recipient to the current task"""
-        if not self.current_task:
-            return
-            
-        email, ok = QInputDialog.getText(self, "Add Recipient", 
-                                        "Enter email address:")
-        if ok and email:
-            self.current_task.recipients.append(email)
-            save_task(self.current_task)
-            self.update_recipient_table()
-    
-    def remove_recipient(self):
-        """Remove selected email recipient from the current task"""
-        if not self.current_task:
-            return
-            
-        current_row = self.recipient_table.currentRow()
-        if current_row >= 0:
-            del self.current_task.recipients[current_row]
-            save_task(self.current_task)
-            self.update_recipient_table()
-    
-    def test_recipient(self):
-        """Test sending email to the selected recipient"""
-        if not self.current_task:
-            return
-            
-        current_row = self.recipient_table.currentRow()
-        if current_row >= 0:
-            email = self.current_task.recipients[current_row]
-            
-            # TODO: Implement actual email sending test
-            # For now, just simulate success/failure randomly
-            import random
-            status = "success" if random.random() > 0.2 else "fail"
-            
-            self.current_task.update_recipient_status(email, status)
-            save_task(self.current_task)
-            self.update_recipient_table()
-            
-            if status == "success":
-                QMessageBox.information(self, "Email Test", f"Successfully sent test email to: {email}")
-            else:
-                QMessageBox.warning(self, "Email Test", f"Failed to send test email to: {email}")
-    
-    def add_task(self):
-        """Add a new task"""
-        task_name, ok = QInputDialog.getText(self, "Add Task", 
-                                           "Enter task name:")
-        if ok and task_name:
-            new_task = Task(name=task_name)
-            save_task(new_task)
-            
-            # Refresh tasks list
-            self.tasks = get_tasks()
-            self.update_task_list()
-            
-            # Select the new task
-            self.task_selector.setCurrentIndex(len(self.tasks) - 1)
-    
-    def edit_task(self):
-        """Edit the current task name"""
-        if not self.current_task:
-            return
-            
-        task_name, ok = QInputDialog.getText(self, "Edit Task", 
-                                           "Enter new task name:", 
-                                           text=self.current_task.name)
-        if ok and task_name:
-            self.current_task.name = task_name
-            save_task(self.current_task)
-            
-            # Refresh the task list
-            self.tasks = get_tasks()
-            current_index = self.task_selector.currentIndex()
-            self.update_task_list()
-            self.task_selector.setCurrentIndex(current_index)
-    
-    def delete_task(self):
-        """Delete the current task"""
-        if not self.current_task or len(self.tasks) <= 1:
-            QMessageBox.warning(self, "Cannot Delete", 
-                              "Cannot delete the only task. At least one task must exist.")
-            return
-            
-        reply = QMessageBox.question(self, "Confirm Delete", 
-                                   f"Are you sure you want to delete task '{self.current_task.name}'?",
-                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                                   
-        if reply == QMessageBox.StandardButton.Yes:
-            current_index = self.task_selector.currentIndex()
-            delete_task(self.current_task.task_id)
-            
-            # Refresh tasks and select another one
-            self.tasks = get_tasks()
-            self.update_task_list()
-            self.task_selector.setCurrentIndex(max(0, current_index - 1))
+        # Update all components with the new task
+        self.feed_manager.set_task(task)
+        self.scheduler_manager.set_task(task)
+        self.recipient_manager.set_task(task)
     
     def run_task_now(self):
         """Execute the RSS fetching and processing task immediately"""
-        if not self.current_task:
+        task = self.task_manager.get_current_task()
+        if not task:
+            QMessageBox.warning(self, "No Task", "No task selected or available.")
             return
-            
+        
         # 更新按钮状态，防止重复点击
         self.run_now_btn.setEnabled(False)
         self.run_now_btn.setText("Running...")
         
         # 首先保存最新的任务状态到配置文件
-        save_task(self.current_task)
+        save_task(task)
         
         # 向用户显示任务已经开始的提示
         QMessageBox.information(self, "Task Started", 
-                              f"The task '{self.current_task.name}' has started in background.\n\n"
+                              f"The task '{task.name}' has started in background.\n\n"
                               f"This may take some time, especially if using AI filtering.\n"
                               f"You can continue using the application while the task runs.")
         
         try:
             # 记录任务ID用于调试
-            task_id = self.current_task.task_id
+            task_id = task.task_id
             print(f"Running task with ID: {task_id}")
             
             # 调用scheduler中的方法立即执行任务
             run_task_now(task_id)
             
             # 由于任务在后台线程执行，这里只更新UI状态
-            self.current_task.update_task_run()
-            save_task(self.current_task)
-            self.update_ui_from_task()
+            task.update_task_run()
+            save_task(task)
+            
+            # 立即更新调度器UI以显示最新的运行时间和下次运行时间
+            self.scheduler_manager.update_scheduler_ui()
+            
+            # 删除延时更新的代码，任务一旦开始，就已经知道下次何时运行了
         except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"任务执行错误: {error_details}")
             QMessageBox.critical(self, "Task Error", 
                                f"Error starting task: {str(e)}")
         finally:
@@ -613,7 +131,12 @@ class MainWindow(QMainWindow):
     def open_settings(self):
         """Open the settings window"""
         from gui.setting_window import SettingsWindow
-        settings_dialog = SettingsWindow(self)
-        settings_dialog.exec()
-        
-        # If we need to refresh anything after settings are updated, do it here
+        try:
+            settings_dialog = SettingsWindow(self)
+            settings_dialog.exec()
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"打开设置窗口错误: {error_details}")
+            QMessageBox.critical(self, "Settings Error", 
+                               f"Error opening settings: {str(e)}")

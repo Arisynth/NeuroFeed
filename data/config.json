@@ -7,8 +7,17 @@
                 "https://www.ithome.com/rss/"
             ],
             "schedule": {
-                "type": "daily",
-                "time": "06:00"
+                "weeks": 1,
+                "time": "08:00",
+                "days": [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6
+                ]
             },
             "recipients": [
                 "yang.cheng_nj@outlook.com"
@@ -19,7 +28,7 @@
             "feeds_status": {
                 "https://www.ithome.com/rss/": {
                     "status": "success",
-                    "last_fetch": "2025-03-24T15:04:51.758806"
+                    "last_fetch": "2025-03-24T17:47:04.446136"
                 },
                 "https://www.ithome.com/rss": {
                     "status": "success",
@@ -52,7 +61,7 @@
                     "last_sent": "2025-03-24T06:27:19.804994"
                 }
             },
-            "last_run": "2025-03-24T17:25:46.956022",
+            "last_run": "2025-03-24T17:43:51.796288",
             "feed_config": {
                 "https://www.ithome.com/rss/": {
                     "items_count": 5,
