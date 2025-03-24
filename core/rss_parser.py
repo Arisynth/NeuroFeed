@@ -4,6 +4,8 @@ from datetime import datetime
 import time
 import logging
 from typing import List, Dict, Any, Optional
+import hashlib
+from .news_db_manager import NewsDBManager
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -21,6 +23,7 @@ class RssParser:
         self.user_agent = user_agent
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": user_agent})
+        self.db_manager = NewsDBManager()
     
     def fetch_feed(self, feed_url: str, items_count: int = 10) -> Dict[str, Any]:
         """获取RSS Feed内容"""
@@ -112,6 +115,32 @@ class RssParser:
                 logger.info(f"条目 #{i+1} 内容长度: {content_len} 字符")
                 
                 processed_entries.append(processed_entry)
+                
+                # Create a unique identifier - prefer guid, fallback to link
+                article_id = getattr(entry, 'id', entry.link)
+                
+                # Generate content hash if content exists
+                content_hash = None
+                if hasattr(entry, 'content'):
+                    content = entry.content[0].value if isinstance(entry.content, list) else entry.content
+                    content_hash = hashlib.md5(content.encode()).hexdigest()
+                elif hasattr(entry, 'summary'):
+                    content_hash = hashlib.md5(entry.summary.encode()).hexdigest()
+                
+                # Get published date if available
+                published_date = None
+                if hasattr(entry, 'published'):
+                    published_date = entry.published
+                
+                # Store in database
+                self.db_manager.add_news_article(
+                    article_id=article_id,
+                    title=entry.title,
+                    link=entry.link,
+                    source=feed.feed.title,
+                    published_date=published_date,
+                    content_hash=content_hash
+                )
             
             elapsed_time = time.time() - start_time
             logger.info(f"\n============ Feed获取完成 ============")

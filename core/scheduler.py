@@ -9,6 +9,7 @@ from ai_processor.filter import ContentFilter
 from ai_processor.summarizer import NewsSummarizer
 from typing import Dict, List, Any
 from core.email_sender import EmailSender, EmailSendError
+from .news_db_manager import NewsDBManager
 
 # Fix the logging format string issue
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -445,3 +446,24 @@ def run_task_now(task_id):
     
     # 在单独的线程中执行，避免阻塞主线程
     threading.Thread(target=lambda: execute_task(task_id), daemon=True).start()
+
+class Scheduler:
+    def __init__(self):
+        self.db_manager = NewsDBManager()
+        self.setup_cleanup_task()
+    
+    def setup_cleanup_task(self):
+        """Set up daily cleanup of old articles."""
+        # Schedule cleanup to run once a day
+        # Adjust this according to your existing scheduling mechanism
+        # If using something like APScheduler:
+        # self.scheduler.add_job(self.cleanup_old_articles, 'interval', days=1)
+        pass
+    
+    def cleanup_old_articles(self):
+        """Run the database cleanup task to remove articles older than 7 days."""
+        try:
+            removed_count = self.db_manager.clean_old_articles(days=7)
+            logger.info(f"Database cleanup completed: {removed_count} old articles removed")
+        except Exception as e:
+            logger.error(f"Error during database cleanup: {e}")
