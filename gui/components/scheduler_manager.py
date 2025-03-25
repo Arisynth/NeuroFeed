@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, 
                            QComboBox, QTimeEdit, QLabel, QPushButton, QGroupBox,
-                           QCheckBox, QGridLayout, QSpinBox)
+                           QCheckBox, QGridLayout, QSpinBox, QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal, QTime
 from core.config_manager import save_task
 from datetime import datetime, timedelta
@@ -276,6 +276,21 @@ class SchedulerManager(QWidget):
         for i, checkbox in enumerate(self.day_checkboxes):
             if checkbox.isChecked():
                 selected_days.append(i)
+        
+        # 警告用户如果没有选择任何天
+        if not selected_days:
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setWindowTitle("No Days Selected")
+            msg.setText("You haven't selected any days for this task.")
+            msg.setInformativeText("The task will not run automatically. Is this what you want?")
+            msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg.setDefaultButton(QMessageBox.StandardButton.No)
+            
+            if msg.exec() == QMessageBox.StandardButton.No:
+                return  # 用户取消，不保存
+            
+            print("用户确认不选择任何天，任务将不会自动运行")
         
         # 创建调度字典
         schedule = {

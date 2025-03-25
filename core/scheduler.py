@@ -409,6 +409,7 @@ def setup_scheduled_tasks():
     
     # 为每个任务设置定时
     task_count = 0
+    scheduled_count = 0
     for task in tasks:
         task_schedule = task.schedule
         if not task_schedule:
@@ -419,6 +420,8 @@ def setup_scheduled_tasks():
         weeks = task_schedule.get("weeks", 1)  # 默认每周执行
         time_str = task_schedule.get("time", "08:00")  # 默认上午8点
         days = task_schedule.get("days", list(range(7)))  # 默认所有天
+        
+        task_count += 1
         
         if not days:
             logger.warning(f"任务 {task.name} (ID: {task.task_id}) 没有选择任何天，跳过调度")
@@ -468,9 +471,9 @@ def setup_scheduled_tasks():
                 
                 logger.info(f"设置任务 {task.name} (ID: {task.task_id}) 在{day_name} {time_str} 执行")
                 day_method.at(time_str).do(create_job(task.task_id))
-                task_count += 1
+                scheduled_count += 1
     
-    logger.info(f"定时任务设置完成，共 {task_count} 个任务被调度")
+    logger.info(f"定时任务设置完成，共 {task_count} 个任务中的 {scheduled_count} 个调度点被设置")
     
     # 输出接下来24小时内将执行的任务
     log_upcoming_tasks()
@@ -480,7 +483,7 @@ def log_upcoming_tasks(hours_ahead=24):
     now = datetime.now()
     end_time = now + timedelta(hours=hours_ahead)
     
-    logger.info(f"\n============ 未来 {hours_ahead} 小时内的定时任务 ============")
+    logger.info(f"\n============ 未来 {hours_ahead} 小时内将执行的定时任务 ============")
     
     # 获取所有任务
     jobs = schedule.get_jobs()
@@ -508,6 +511,13 @@ def log_upcoming_tasks(hours_ahead=24):
             logger.info(f"- 任务描述: {job.job_func.__name__}")
     else:
         logger.info(f"未来 {hours_ahead} 小时内没有定时任务")
+
+def reload_scheduled_tasks():
+    """重新加载所有定时任务 - 可在调度设置更改后调用"""
+    logger.info("重新加载定时任务...")
+    setup_scheduled_tasks()
+    logger.info("定时任务重新加载完成")
+    return get_scheduler_status()
 
 def start_scheduler():
     """启动调度器"""

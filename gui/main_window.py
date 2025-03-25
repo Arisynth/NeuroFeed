@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, 
                            QWidget, QPushButton, QTabWidget, QMessageBox)
 from PyQt6.QtCore import Qt
-from core.scheduler import run_task_now
+from core.scheduler import run_task_now, reload_scheduled_tasks
 from gui.components.task_manager import TaskManager
 from gui.components.feed_manager import FeedManager
 from gui.components.recipient_manager import RecipientManager
@@ -39,6 +39,7 @@ class MainWindow(QMainWindow):
         
         # Tab 2: Scheduling - using SchedulerManager
         self.scheduler_manager = SchedulerManager()
+        self.scheduler_manager.schedule_updated.connect(self.reload_tasks)
         self.tabs.addTab(self.scheduler_manager, "Schedule")
         
         # Tab 3: Recipients - using RecipientManager
@@ -127,6 +128,26 @@ class MainWindow(QMainWindow):
             # 恢复按钮状态
             self.run_now_btn.setEnabled(True)
             self.run_now_btn.setText("Run Now")
+    
+    def reload_tasks(self):
+        """重新加载任务调度，响应调度更新信号"""
+        print("调度设置已更新，正在重新加载任务...")
+        try:
+            status = reload_scheduled_tasks()
+            # 显示确认消息
+            job_count = status.get('active_jobs', 0)
+            QMessageBox.information(self, "Schedule Updated", 
+                                  f"The schedule has been updated.\n\n"
+                                  f"{job_count} task(s) have been scheduled.")
+            
+            # 刷新调度管理器的显示
+            self.scheduler_manager.update_next_run_display()
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"重新加载任务出错: {error_details}")
+            QMessageBox.critical(self, "Schedule Error", 
+                              f"Error reloading tasks: {str(e)}")
     
     def open_settings(self):
         """Open the settings window"""
