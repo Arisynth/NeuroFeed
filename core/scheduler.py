@@ -2,6 +2,7 @@ import schedule
 import time
 import threading
 import logging
+import queue
 from datetime import datetime, timedelta
 from core.config_manager import load_config, save_config, get_tasks, save_task
 from core.rss_parser import RssParser
@@ -15,8 +16,70 @@ from .news_db_manager import NewsDBManager
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("scheduler")
 
+# Global variables for task queue management
+task_queue = queue.Queue()
+task_processing_thread = None
+is_task_running = False
+task_lock = threading.Lock()  # For thread-safe operations on shared variables
+
 def execute_task(task_id=None):
-    """执行指定任务或所有任务"""
+    """将任务放入队列而不是直接执行"""
+    logger.info(f"将任务 ID:{task_id or '所有任务'} 放入执行队列")
+    task_queue.put(task_id)
+    ensure_processor_running()
+
+def process_task_queue():
+    """处理任务队列的后台线程"""
+    global is_task_running
+    
+    logger.info("任务队列处理线程已启动")
+    
+    while True:
+        try:
+            # 从队列获取下一个任务
+            task_id = task_queue.get(block=True)
+            
+            with task_lock:
+                is_task_running = True
+            
+            logger.info(f"\n=====================================================")
+            logger.info(f"从队列中取出任务 ID:{task_id or '所有任务'} 开始执行")
+            logger.info(f"队列中剩余任务数量: {task_queue.qsize()}")
+            logger.info(f"=====================================================\n")
+            
+            # 实际执行任务
+            _execute_task(task_id)
+            
+            # 标记队列任务完成
+            task_queue.task_done()
+            
+            with task_lock:
+                is_task_running = False
+                
+            logger.info(f"\n=====================================================")
+            logger.info(f"任务 ID:{task_id or '所有任务'} 执行完成")
+            logger.info(f"队列中剩余任务数量: {task_queue.qsize()}")
+            logger.info(f"=====================================================\n")
+            
+        except Exception as e:
+            import traceback
+            logger.error(f"任务队列处理异常: {str(e)}")
+            logger.error(f"详细追踪:\n{traceback.format_exc()}")
+            
+            with task_lock:
+                is_task_running = False
+
+def ensure_processor_running():
+    """确保任务处理线程在运行"""
+    global task_processing_thread
+    
+    if task_processing_thread is None or not task_processing_thread.is_alive():
+        logger.info("启动新的任务队列处理线程")
+        task_processing_thread = threading.Thread(target=process_task_queue, daemon=True)
+        task_processing_thread.start()
+
+def _execute_task(task_id=None):
+    """实际执行任务的函数 (被process_task_queue调用)"""
     logger.info(f"\n=====================================================")
     logger.info(f"开始执行{'指定' if task_id else '所有'}任务")
     logger.info(f"=====================================================\n")
@@ -453,6 +516,9 @@ def start_scheduler():
     # 设置定时任务
     setup_scheduled_tasks()
     
+    # 确保任务处理线程已启动
+    ensure_processor_running()
+    
     # 存储线程引用以便后续检查
     scheduler_thread = None
     
@@ -482,8 +548,14 @@ def start_scheduler():
 
 def get_scheduler_status():
     """获取调度器状态信息"""
+    with task_lock:
+        queue_size = task_queue.qsize()
+        current_running = is_task_running
+    
     status = {
         "active_jobs": len(schedule.get_jobs()),
+        "queue_size": queue_size,
+        "is_task_running": current_running,
         "next_jobs": []
     }
     
@@ -506,11 +578,19 @@ def get_scheduler_status():
     return status
 
 def run_task_now(task_id):
-    """立即执行指定任务"""
+    """立即执行指定任务 (放入队列)"""
     logger.info(f"立即执行任务 ID: {task_id}")
     
-    # 在单独的线程中执行，避免阻塞主线程
-    threading.Thread(target=lambda: execute_task(task_id), daemon=True).start()
+    # 将任务添加到队列而不是创建新线程
+    execute_task(task_id)
+    
+    # 返回当前队列状态
+    with task_lock:
+        return {
+            "queued": True,
+            "position": task_queue.qsize(),
+            "is_task_running": is_task_running
+        }
 
 class Scheduler:
     def __init__(self):
