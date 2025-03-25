@@ -202,28 +202,28 @@ class TestEmailSender(unittest.TestCase):
     
     def test_importance_stars_generation(self):
         """测试重要性星级显示的生成逻辑"""
-        # 创建一个模拟内容，只修改importance值
+        # 创建一个模拟内容，使用与AI评估一致的格式
         test_importance_content = [
             {
                 "title": "1星新闻",
                 "news_brief": "低重要性",
                 "source": "测试",
                 "link": "#",
-                "evaluation": {"importance": 1}
+                "evaluation": {"importance": {"rating": "极低"}}
             },
             {
-                "title": "2星新闻",  # 修改为2星，因为5/2=2.5，向下舍入为2
+                "title": "2星新闻",
                 "news_brief": "中等重要性",
                 "source": "测试",
                 "link": "#",
-                "evaluation": {"importance": 5}
+                "evaluation": {"importance": {"rating": "低"}}
             },
             {
                 "title": "5星新闻",
                 "news_brief": "高重要性",
                 "source": "测试",
                 "link": "#",
-                "evaluation": {"importance": 10}
+                "evaluation": {"importance": {"rating": "极高"}}
             }
         ]
         
@@ -233,20 +233,20 @@ class TestEmailSender(unittest.TestCase):
         
         # 计算每个重要性级别应该显示的星星数量
         one_star = '<span class="star">★</span>'
-        two_stars = '<span class="star">★</span>' * 2  # 修改为2星
+        two_stars = '<span class="star">★</span>' * 2
         five_stars = '<span class="star">★</span>' * 5
         
         # 验证星级显示
         self.assertIn(one_star, html_content)
-        self.assertIn(two_stars, html_content)  # 修改预期
+        self.assertIn(two_stars, html_content)
         self.assertIn(five_stars, html_content)
         
         # 验证星级位置是否在正确的新闻项中
         one_star_section = html_content.split("1星新闻")[1].split("</div>")[0]
         self.assertIn(one_star, one_star_section)
         
-        three_star_section = html_content.split("2星新闻")[1].split("</div>")[0]  # 修改为2星新闻
-        self.assertIn(two_stars, three_star_section)  # 修改预期
+        two_star_section = html_content.split("2星新闻")[1].split("</div>")[0]
+        self.assertIn(two_stars, two_star_section)
         
         five_star_section = html_content.split("5星新闻")[1].split("</div>")[0]
         self.assertIn(five_stars, five_star_section)
