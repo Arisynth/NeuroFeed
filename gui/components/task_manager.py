@@ -26,18 +26,29 @@ class TaskManager(QWidget):
         
         self.task_selector = QComboBox()
         self.task_selector.currentIndexChanged.connect(self.on_task_changed)
+        # Reduce width of task selector to make room for buttons
         task_selection_layout.addWidget(self.task_selector, 1)
         
         self.add_task_btn = QPushButton("Add Task")
         self.edit_task_btn = QPushButton("Edit Task")
+        self.duplicate_task_btn = QPushButton("Duplicate Task")
         self.delete_task_btn = QPushButton("Delete Task")
+        
+        # Set fixed width to ensure buttons have consistent size
+        button_width = 100
+        self.add_task_btn.setFixedWidth(button_width)
+        self.edit_task_btn.setFixedWidth(button_width)
+        self.duplicate_task_btn.setFixedWidth(button_width)
+        self.delete_task_btn.setFixedWidth(button_width)
         
         self.add_task_btn.clicked.connect(self.add_task)
         self.edit_task_btn.clicked.connect(self.edit_task)
+        self.duplicate_task_btn.clicked.connect(self.duplicate_task)
         self.delete_task_btn.clicked.connect(self.delete_task)
         
         task_selection_layout.addWidget(self.add_task_btn)
         task_selection_layout.addWidget(self.edit_task_btn)
+        task_selection_layout.addWidget(self.duplicate_task_btn)
         task_selection_layout.addWidget(self.delete_task_btn)
         
         layout.addLayout(task_selection_layout)
@@ -163,3 +174,42 @@ class TaskManager(QWidget):
     def get_current_task(self):
         """Get the currently selected task"""
         return self.current_task
+    
+    def duplicate_task(self):
+        """Duplicate the current task"""
+        if not self.current_task:
+            return
+        
+        # Get a name for the duplicate task
+        task_name, ok = QInputDialog.getText(self, "Duplicate Task", 
+                                           "Enter name for duplicated task:", 
+                                           text=f"{self.current_task.name} (Copy)")
+        if ok and task_name:
+            # Create a new task as a copy of the current one
+            task_dict = self.current_task.to_dict()
+            
+            # Remove the ID and last run info (these should be new)
+            task_dict.pop("id", None)
+            task_dict["name"] = task_name
+            task_dict["last_run"] = None
+            
+            # Reset status tracking for the new task
+            task_dict["feeds_status"] = {}
+            task_dict["recipients_status"] = {}
+            
+            # Create and save the new task
+            new_task = Task.from_dict(task_dict)
+            save_task(new_task)
+            
+            # Refresh tasks list
+            self.tasks = get_tasks()
+            self.update_task_list()
+            
+            # Find and select the new task
+            for i, task in enumerate(self.tasks):
+                if task.task_id == new_task.task_id:
+                    self.task_selector.setCurrentIndex(i)
+                    break
+            
+            QMessageBox.information(self, "Task Duplicated", 
+                                  f"Task '{task_name}' has been created as a duplicate.")
