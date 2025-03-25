@@ -121,10 +121,10 @@ def execute_task(task_id=None):
             global_interests = config.get("global_settings", {}).get("user_interests", [])
             logger.info(f"\n全局兴趣标签: {global_interests} (仅用作默认值)")
             
-            # 批量获取RSS feed
+            # 批量获取RSS feed - 现在传递task_id和recipients
             logger.info(f"\n============ 开始获取Feed内容 ============")
             logger.info(f"准备获取 {len(feed_configs)} 个RSS源")
-            feed_results = rss_parser.fetch_multiple_feeds(feed_configs)
+            feed_results = rss_parser.fetch_multiple_feeds(feed_configs, task.task_id, task.recipients)
             
             # 更新feed状态和收集统计信息
             total_items = 0
@@ -191,13 +191,14 @@ def execute_task(task_id=None):
             try:
                 kept_contents, discarded_contents = content_filter.filter_content_batch(all_contents)
                 
-                # 标记丢弃的内容为已处理
+                # 标记丢弃的内容为已处理 - 使用新的任务特定标记
                 for content in discarded_contents:
                     if "article_id" in content:
                         article_id = content["article_id"]
-                        success = rss_parser.db_manager.mark_as_processed(article_id)
+                        # 标记为在当前任务中被丢弃
+                        success = rss_parser.db_manager.mark_as_discarded_for_task(article_id, task.task_id)
                         if success:
-                            logger.info(f"已标记丢弃文章为已处理: {content.get('title', '无标题')} (ID: {article_id})")
+                            logger.info(f"已标记文章为在任务 {task.task_id} 中丢弃: {content.get('title', '无标题')} (ID: {article_id})")
                         else:
                             logger.warning(f"标记丢弃文章失败: {content.get('title', '无标题')} (ID: {article_id})")
             except Exception as e:
@@ -285,23 +286,23 @@ def execute_task(task_id=None):
                     for recipient, result in results.items():
                         status = result.get("status", "fail")
                         task.update_recipient_status(recipient, status)
+                        
+                        # 如果成功发送，标记该收件人已收到文章
+                        if status == "success":
+                            for content in kept_contents:
+                                if "article_id" in content:
+                                    article_id = content["article_id"]
+                                    success = rss_parser.db_manager.mark_as_sent_to_recipient(article_id, recipient)
+                                    if not success:
+                                        logger.warning(f"标记文章为已发送给 {recipient} 失败: {content.get('title', '无标题')}")
                     
                     # 记录邮件发送结果
                     success_count = sum(1 for r in results.values() if r.get("status") == "success")
                     logger.info(f"邮件发送完成: {success_count}/{len(task.recipients)}成功")
                     
-                    # 如果全部成功，标记所有内容为已处理
+                    # 如果全部成功，不再全部标记为已处理，因为我们已经按收件人标记了
                     if success_count == len(task.recipients):
                         logger.info("所有邮件发送成功")
-                        # 标记所有已发送的内容为已处理
-                        for content in kept_contents:
-                            if "article_id" in content:
-                                article_id = content["article_id"]
-                                success = rss_parser.db_manager.mark_as_processed(article_id)
-                                if success:
-                                    logger.info(f"已标记发送文章为已处理: {content.get('title', '无标题')} (ID: {article_id})")
-                                else:
-                                    logger.warning(f"标记发送文章失败: {content.get('title', '无标题')} (ID: {article_id})")
                     else:
                         logger.warning(f"部分邮件发送失败: {len(task.recipients) - success_count} 个失败")
                         for recipient, result in results.items():

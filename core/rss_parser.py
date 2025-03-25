@@ -50,8 +50,15 @@ class RssParser:
             logger.error(f"刷新设置时出错: {e}")
             return False
     
-    def fetch_feed(self, feed_url: str, items_count: int = 10) -> Dict[str, Any]:
-        """获取RSS Feed内容"""
+    def fetch_feed(self, feed_url: str, items_count: int = 10, task_id: str = None, recipients: List[str] = None) -> Dict[str, Any]:
+        """获取RSS Feed内容
+        
+        Args:
+            feed_url: RSS Feed的URL
+            items_count: 要获取的条目数量
+            task_id: 当前执行的任务ID（用于跳过被该任务丢弃的文章）
+            recipients: 当前任务的收件人列表（用于检查是否所有人都收到过）
+        """
         try:
             # 每次获取Feed前刷新配置
             self.refresh_settings()
@@ -60,6 +67,10 @@ class RssParser:
             logger.info(f"Feed URL: {feed_url}")
             logger.info(f"计划获取条目数量: {items_count}")
             logger.info(f"跳过已处理文章: {'是' if self.skip_processed else '否'}")
+            if task_id:
+                logger.info(f"当前任务ID: {task_id}")
+            if recipients:
+                logger.info(f"当前收件人: {recipients}")
             start_time = time.time()
             
             # 使用feedparser解析RSS Feed
@@ -113,11 +124,25 @@ class RssParser:
                 # 获取唯一标识符
                 article_id = getattr(entry, 'id', entry.link)
                 
-                # 如果启用了跳过处理过的文章功能，检查是否已处理
-                if self.skip_processed and self.db_manager.get_processed_status(article_id):
+                # 增强版的跳过逻辑
+                skip_article = False
+                skip_reason = ""
+                
+                if self.skip_processed:
+                    # 检查是否对此任务丢弃过
+                    if task_id and self.db_manager.is_article_discarded_for_task(article_id, task_id):
+                        skip_article = True
+                        skip_reason = f"在任务 {task_id} 中被丢弃过"
+                    
+                    # 检查是否所有收件人都已收到
+                    elif recipients and self.db_manager.is_article_sent_to_all_recipients(article_id, recipients):
+                        skip_article = True
+                        skip_reason = "所有收件人已收到"
+                
+                if skip_article:
                     skipped_count += 1
                     title = getattr(entry, 'title', article_id)
-                    logger.info(f"跳过已处理的文章 #{entry_index}: {title}")
+                    logger.info(f"跳过文章 #{entry_index}: {title} - 原因: {skip_reason}")
                     continue
                 
                 # 提取发布日期，如果存在
@@ -216,12 +241,14 @@ class RssParser:
                 "items": []
             }
 
-    def fetch_multiple_feeds(self, feed_configs: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    def fetch_multiple_feeds(self, feed_configs: List[Dict[str, Any]], task_id: str = None, recipients: List[str] = None) -> Dict[str, Dict[str, Any]]:
         """批量获取多个RSS Feed
         
         Args:
             feed_configs: 包含Feed URL和配置的字典列表
                 每个字典应包含'url'和'items_count'
+            task_id: 当前执行的任务ID
+            recipients: 当前任务的收件人列表
                 
         Returns:
             URL到Feed结果的映射字典
@@ -235,7 +262,7 @@ class RssParser:
             if not url:
                 continue
                 
-            result = self.fetch_feed(url, items_count)
+            result = self.fetch_feed(url, items_count, task_id, recipients)
             results[url] = result
             
             # 添加一个小延迟，避免过快请求

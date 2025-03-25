@@ -43,6 +43,28 @@ class NewsDBManager:
         )
         ''')
         
+        # New table to track discarded articles per task
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS discarded_articles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            article_id TEXT,
+            task_id TEXT,
+            discarded_date TEXT,
+            UNIQUE(article_id, task_id)
+        )
+        ''')
+        
+        # New table to track sent articles per recipient
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sent_articles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            article_id TEXT,
+            recipient TEXT,
+            sent_date TEXT,
+            UNIQUE(article_id, recipient)
+        )
+        ''')
+        
         conn.commit()
         conn.close()
     
@@ -108,6 +130,10 @@ class NewsDBManager:
             # Delete old articles
             cursor.execute("DELETE FROM news_articles WHERE retrieved_date < ?", (cutoff_date,))
             deleted_count = cursor.rowcount
+            
+            # Also clean up the discarded and sent articles tables
+            cursor.execute("DELETE FROM discarded_articles WHERE discarded_date < ?", (cutoff_date,))
+            cursor.execute("DELETE FROM sent_articles WHERE sent_date < ?", (cutoff_date,))
             
             conn.commit()
             conn.close()
@@ -214,3 +240,140 @@ class NewsDBManager:
         except Exception as e:
             print(f"Error getting processed articles: {e}")
             return []
+        
+    # New methods for task-specific article tracking
+    def mark_as_discarded_for_task(self, article_id, task_id):
+        """
+        Mark an article as discarded for a specific task.
+        
+        Args:
+            article_id (str): Unique identifier for the article
+            task_id (str): ID of the task that discarded the article
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            now = datetime.datetime.now().isoformat()
+            
+            # Insert or replace (in case it was already marked)
+            cursor.execute('''
+            INSERT OR REPLACE INTO discarded_articles (article_id, task_id, discarded_date)
+            VALUES (?, ?, ?)
+            ''', (article_id, task_id, now))
+            
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error marking article as discarded for task: {e}")
+            return False
+    
+    def is_article_discarded_for_task(self, article_id, task_id):
+        """
+        Check if an article was discarded for a specific task.
+        
+        Args:
+            article_id (str): Unique identifier for the article
+            task_id (str): ID of the task
+            
+        Returns:
+            bool: True if article was discarded for the task, False otherwise
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+            SELECT id FROM discarded_articles 
+            WHERE article_id = ? AND task_id = ?
+            ''', (article_id, task_id))
+            
+            result = cursor.fetchone() is not None
+            
+            conn.close()
+            return result
+        except Exception as e:
+            print(f"Error checking if article was discarded for task: {e}")
+            return False
+    
+    # New methods for recipient-specific article tracking
+    def mark_as_sent_to_recipient(self, article_id, recipient):
+        """
+        Mark an article as sent to a specific recipient.
+        
+        Args:
+            article_id (str): Unique identifier for the article
+            recipient (str): Email address of the recipient
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            now = datetime.datetime.now().isoformat()
+            
+            # Insert or replace (in case it was already marked)
+            cursor.execute('''
+            INSERT OR REPLACE INTO sent_articles (article_id, recipient, sent_date)
+            VALUES (?, ?, ?)
+            ''', (article_id, recipient, now))
+            
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error marking article as sent to recipient: {e}")
+            return False
+    
+    def is_article_sent_to_recipient(self, article_id, recipient):
+        """
+        Check if an article was sent to a specific recipient.
+        
+        Args:
+            article_id (str): Unique identifier for the article
+            recipient (str): Email address of the recipient
+            
+        Returns:
+            bool: True if article was sent to the recipient, False otherwise
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+            SELECT id FROM sent_articles 
+            WHERE article_id = ? AND recipient = ?
+            ''', (article_id, recipient))
+            
+            result = cursor.fetchone() is not None
+            
+            conn.close()
+            return result
+        except Exception as e:
+            print(f"Error checking if article was sent to recipient: {e}")
+            return False
+    
+    def is_article_sent_to_all_recipients(self, article_id, recipients):
+        """
+        Check if an article was sent to all specified recipients.
+        
+        Args:
+            article_id (str): Unique identifier for the article
+            recipients (list): List of recipient email addresses
+            
+        Returns:
+            bool: True if article was sent to all recipients, False otherwise
+        """
+        if not recipients:
+            return False
+            
+        for recipient in recipients:
+            if not self.is_article_sent_to_recipient(article_id, recipient):
+                return False
+        return True
