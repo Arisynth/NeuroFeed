@@ -116,7 +116,7 @@ class AiService:
                     "prompt": prompt,
                     "stream": False
                 },
-                timeout=60  # 60秒超时
+                timeout=120  # 120秒超时
             )
             
             if response.status_code == 200:

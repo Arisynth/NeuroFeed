@@ -149,42 +149,64 @@ class EmailSender:
             evaluation = item.get("evaluation", {})
             
             # 获取重要性分数，确保是数字类型
-            importance = evaluation.get("importance", 5)
-            if not isinstance(importance, (int, float)):
-                # 如果不是数字类型，尝试提取数字或使用默认值
-                try:
-                    # 如果是字典，看看是否有score或value键
-                    if isinstance(importance, dict):
-                        importance = importance.get("score", importance.get("value", 5))
-                    importance = float(importance)  # 尝试转换为数字
-                except (ValueError, TypeError):
-                    importance = 5  # 转换失败则使用默认值
+            importance = evaluation.get("importance", {})
+            importance_score = 3  # 默认为中等重要性（3分）
+            
+            # 如果是字典（来自AI评估），直接映射rating值到分数
+            if isinstance(importance, dict) and "rating" in importance:
+                rating = importance.get("rating")
+                if rating == "极低":
+                    importance_score = 1
+                elif rating == "低":
+                    importance_score = 2
+                elif rating == "中":
+                    importance_score = 3
+                elif rating == "高":
+                    importance_score = 4
+                elif rating == "极高":
+                    importance_score = 5
             
             # 获取时效性分数，确保是数字类型
-            timeliness = evaluation.get("timeliness", 5)
-            if not isinstance(timeliness, (int, float)):
-                try:
-                    if isinstance(timeliness, dict):
-                        timeliness = timeliness.get("score", timeliness.get("value", 5))
-                    timeliness = float(timeliness)
-                except (ValueError, TypeError):
-                    timeliness = 5
+            timeliness = evaluation.get("timeliness", {})
+            timeliness_score = 3  # 默认为中等时效性（3分）
             
-            # 获取趣味性分数，确保是数字类型
-            interest = evaluation.get("interest", 5)
-            if not isinstance(interest, (int, float)):
-                try:
-                    if isinstance(interest, dict):
-                        interest = interest.get("score", interest.get("value", 5))
-                    interest = float(interest)
-                except (ValueError, TypeError):
-                    interest = 5
+            # 如果是字典（来自AI评估），直接映射rating值到分数
+            if isinstance(timeliness, dict) and "rating" in timeliness:
+                rating = timeliness.get("rating")
+                if rating == "极低":
+                    timeliness_score = 1
+                elif rating == "低":
+                    timeliness_score = 2
+                elif rating == "中":
+                    timeliness_score = 3
+                elif rating == "高":
+                    timeliness_score = 4
+                elif rating == "极高":
+                    timeliness_score = 5
+            
+            # 获取趣味性分数，确保是数字类型 - 修复键名为interest_level
+            interest_level = evaluation.get("interest_level", {})
+            interest_score = 3  # 默认为中等趣味性（3分）
+            
+            # 如果是字典（来自AI评估），直接映射rating值到分数
+            if isinstance(interest_level, dict) and "rating" in interest_level:
+                rating = interest_level.get("rating")
+                if rating == "极低":
+                    interest_score = 1
+                elif rating == "低":
+                    interest_score = 2
+                elif rating == "中":
+                    interest_score = 3
+                elif rating == "高":
+                    interest_score = 4
+                elif rating == "极高":
+                    interest_score = 5
             
             # 获取发布/获取时间，如果没有则使用当前时间
             pub_time = item.get("pub_date", datetime.now().isoformat())
             
             # 返回排序键（负值使得大值排在前面）
-            return (-importance, -timeliness, -interest, pub_time)
+            return (-importance_score, -timeliness_score, -interest_score, pub_time)
         
         # 对内容列表进行排序并返回
         return sorted(contents, key=get_sort_key)
@@ -205,6 +227,7 @@ class EmailSender:
             .news-item h3 { margin: 0 0 10px; font-size: 18px; }
             .news-item .meta { display: flex; font-size: 13px; color: #7f8c8d; margin-bottom: 10px; }
             .news-item .source { font-weight: bold; margin-right: 10px; color: #2c3e50; }
+            .news-item .pubdate { margin-right: 10px; color: #7f8c8d; }
             .news-item .rating { display: flex; margin-right: 10px; }
             .news-item .rating .star { color: #f39c12; margin-right: 2px; }
             .news-item .category { display: inline-block; background-color: #e9ecef; padding: 2px 6px; border-radius: 3px; font-size: 12px; margin-left: 5px; }
@@ -238,6 +261,20 @@ class EmailSender:
             news_brief = content.get("news_brief", "无内容")
             link = content.get("link", "#")
             source = content.get("source", "未知来源")
+            
+            # 获取并格式化发布时间
+            pub_date_html = ""
+            pub_date = content.get("published", "")
+            if pub_date:
+                try:
+                    # 尝试解析ISO格式日期
+                    from datetime import datetime
+                    date_obj = datetime.fromisoformat(pub_date)
+                    formatted_date = date_obj.strftime("%Y年%m月%d日 %H:%M")
+                    pub_date_html = f'<span class="pubdate">发布时间: {formatted_date}</span>'
+                except (ValueError, TypeError):
+                    # 如果解析失败，直接使用原始字符串
+                    pub_date_html = f'<span class="pubdate">发布时间: {pub_date}</span>'
             
             # 获取评估数据，用于显示重要性等级
             evaluation = content.get("evaluation", {})
@@ -282,6 +319,7 @@ class EmailSender:
                 <h3>{title} {categories_html}</h3>
                 <div class="meta">
                     <span class="source">来源: {source}</span>
+                    {pub_date_html}
                     {importance_stars}
                 </div>
                 <div class="content">{news_brief}</div>

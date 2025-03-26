@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from ai_processor.ai_utils import AiService, AiException
@@ -110,6 +111,28 @@ class NewsSummarizer:
         
         return content
     
+    def _is_chinese_title(self, text: str) -> bool:
+        """检测标题是否已经主要是中文
+        
+        Args:
+            text: 要检查的文本
+            
+        Returns:
+            如果文本主要是中文返回True，否则返回False
+        """
+        # 检测中文字符的正则表达式
+        chinese_pattern = re.compile(r'[\u4e00-\u9fff]')
+        
+        # 如果文本为空，返回False
+        if not text:
+            return False
+        
+        # 计算中文字符的数量
+        chinese_chars = chinese_pattern.findall(text)
+        
+        # 如果中文字符占比超过1%，认为是中文标题
+        return len(chinese_chars) / len(text) > 0.01
+    
     def _generate_ai_summary(self, content: Dict[str, Any]) -> str:
         """使用AI生成新闻简报
         
@@ -131,8 +154,40 @@ class NewsSummarizer:
         # 调用AI
         response = self.ai_service.call_ai(prompt, max_retries=2)
         
-        # 处理AI响应，移除可能的引号或多余格式
-        brief = response.strip().strip('"\'')
+        # 尝试从AI响应中提取标题和正文
+        # 查找标题标记
+        translated_title = None
+        brief = response.strip()
+        
+        # 只有当原标题不是中文时才尝试提取翻译的标题
+        original_title = content.get("title", "")
+        if not self._is_chinese_title(original_title):
+            # 检查响应是否包含标题格式（如 "标题：翻译的标题" 或 "# 翻译的标题"）
+            title_patterns = [
+                r"(?:标题[：:]\s*)(.+?)(?:\n|$)",   # 标题：翻译的标题
+                r"(?:^|\n)#\s+(.+?)(?:\n|$)",      # # 翻译的标题
+                r"(?:^|\n)【(.+?)】(?:\n|$)"       # 【翻译的标题】
+            ]
+            
+            for pattern in title_patterns:
+                match = re.search(pattern, brief)
+                if match:
+                    translated_title = match.group(1).strip()
+                    # 移除已提取的标题部分
+                    brief = re.sub(pattern, '', brief, 1).strip()
+                    break
+            
+            # 如果找到了翻译的标题，更新内容
+            if translated_title and translated_title != original_title:
+                logger.info(f"提取到翻译标题: '{translated_title}'")
+                # 保存原始标题
+                if "original_title" not in content:
+                    content["original_title"] = original_title
+                # 更新为翻译的标题
+                content["title"] = translated_title
+        
+        # 处理简报内容，移除可能的引号或多余格式
+        brief = brief.strip().strip('"\'')
         
         # 验证简报内容
         if len(brief) < 50:  # 简报过短表示可能有问题
@@ -157,6 +212,9 @@ class NewsSummarizer:
         # 构建提示词
         current_date = datetime.now().strftime("%Y年%m月%d日")
         
+        # 检测标题是否已经是中文
+        is_chinese = self._is_chinese_title(title)
+        
         # 根据简报风格调整提示词
         style_description = ""
         if self.brief_style == "informative":
@@ -165,11 +223,22 @@ class NewsSummarizer:
             style_description = "简明扼要的"
         elif self.brief_style == "conversational":
             style_description = "对话式、通俗易懂的"
+        
+        # 根据标题语言调整提示词
+        title_instruction = ""
+        if is_chinese:
+            title_instruction = "新闻标题已经是中文，无需翻译。"
+        else:
+            title_instruction = "新闻标题不是中文，请将标题翻译成中文。在回复中，先输出'标题：你翻译的中文标题'，然后空一行再输出简报正文。"
             
         return f"""请为以下新闻生成一个{style_description}内容简报。简报语言请使用中文，但人名等特殊名词可以不翻译。
+
+{title_instruction}
+
 简报应该是完整的，有开头有结尾，包含新闻的主要信息点，让读者能快速了解新闻的要点。
 简报内容应该简洁明了，尽量简短，但不要过于简略以至于缺失重要信息。
-简报里的所有内容都必须基于新闻原文，不要编造任何信息：
+简报里的所有内容都必须基于新闻原文，不要编造任何信息。简报里只需要包含新闻相关信息，不需要添加额外信息如“当前时间”、“简报结束”等。
+简报以纯文本方式输出，不需要添加任何markdown格式。
 
 标题：{title}
 
@@ -178,5 +247,5 @@ class NewsSummarizer:
 
 当前日期：{current_date}
 
-请直接返回简报文本，不要加引号或前缀说明。
+{"如果标题需要翻译，请按照'标题：翻译后的标题'和正文的格式返回。" if not is_chinese else "请直接返回简报内容。"}
 """
