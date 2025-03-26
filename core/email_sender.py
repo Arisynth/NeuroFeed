@@ -1,5 +1,6 @@
 import smtplib
 import logging
+import re
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
@@ -225,10 +226,10 @@ class EmailSender:
             .news-item { padding: 15px; margin-bottom: 15px; border-bottom: 1px solid #eee; }
             .news-item:last-child { border-bottom: none; }
             .news-item h3 { margin: 0 0 10px; font-size: 18px; }
-            .news-item .meta { display: flex; font-size: 13px; color: #7f8c8d; margin-bottom: 10px; }
-            .news-item .source { font-weight: bold; margin-right: 10px; color: #2c3e50; }
-            .news-item .pubdate { margin-right: 10px; color: #7f8c8d; }
-            .news-item .rating { display: flex; margin-right: 10px; }
+            .news-item .meta { font-size: 13px; color: #7f8c8d; margin-bottom: 10px; line-height: 1.5; }
+            .news-item .source { font-weight: bold; color: #2c3e50; display: block; }
+            .news-item .pubdate { display: block; color: #7f8c8d; margin-top: 3px; }
+            .news-item .rating { display: flex; margin-top: 3px; }
             .news-item .rating .star { color: #f39c12; margin-right: 2px; }
             .news-item .category { display: inline-block; background-color: #e9ecef; padding: 2px 6px; border-radius: 3px; font-size: 12px; margin-left: 5px; }
             .news-item .content { margin: 10px 0; }
@@ -259,6 +260,8 @@ class EmailSender:
         for content in sorted_contents:
             title = content.get("title", "无标题")
             news_brief = content.get("news_brief", "无内容")
+            # 清除Markdown格式
+            news_brief = self._remove_markdown(news_brief)
             link = content.get("link", "#")
             source = content.get("source", "未知来源")
             
@@ -338,6 +341,47 @@ class EmailSender:
         """
         
         return html
+        
+    def _remove_markdown(self, text: str) -> str:
+        """移除Markdown格式符号，转换为纯文本
+        
+        Args:
+            text: 包含Markdown格式的文本
+            
+        Returns:
+            清除了Markdown格式的纯文本
+        """
+        if not text:
+            return ""
+            
+        # 定义要移除的Markdown格式
+        replacements = [
+            # 移除标题标记
+            (r'#{1,6}\s+(.+?)(?:\n|$)', r'\1\n'),
+            # 移除粗体
+            (r'\*\*(.+?)\*\*', r'\1'),
+            (r'__(.+?)__', r'\1'),
+            # 移除斜体
+            (r'\*([^\*]+?)\*', r'\1'),
+            (r'_([^_]+?)_', r'\1'),
+            # 移除分隔符
+            (r'(-{3,}|\*{3,}|_{3,})\n', r'\n'),
+            # 移除列表标记
+            (r'^\s*[-*+]\s+(.+?)(?:\n|$)', r'\1\n'),
+            (r'^\s*\d+\.\s+(.+?)(?:\n|$)', r'\1\n'),
+            # 移除引用符号
+            (r'^\s*>\s*(.+?)(?:\n|$)', r'\1\n'),
+            # 移除代码块
+            (r'```[\s\S]*?```', r''),
+            # 移除行内代码
+            (r'`(.+?)`', r'\1'),
+        ]
+        
+        # 应用替换规则
+        for pattern, replacement in replacements:
+            text = re.sub(pattern, replacement, text)
+        
+        return text
     
     def _group_by_source(self, contents: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
         """将内容按照来源分组"""
