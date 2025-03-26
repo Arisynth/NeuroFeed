@@ -260,8 +260,8 @@ class EmailSender:
         for content in sorted_contents:
             title = content.get("title", "无标题")
             news_brief = content.get("news_brief", "无内容")
-            # 清除Markdown格式
-            news_brief = self._remove_markdown(news_brief)
+            # 将Markdown转换为HTML，而不是完全移除
+            news_brief = self._convert_markdown_to_html(news_brief)
             link = content.get("link", "#")
             source = content.get("source", "未知来源")
             
@@ -342,19 +342,94 @@ class EmailSender:
         
         return html
         
-    def _remove_markdown(self, text: str) -> str:
-        """移除Markdown格式符号，转换为纯文本
+    def _convert_markdown_to_html(self, text: str) -> str:
+        """将Markdown格式转换为HTML格式，保留结构但移除不需要的标记
         
         Args:
             text: 包含Markdown格式的文本
             
         Returns:
-            清除了Markdown格式的纯文本
+            转换为HTML的文本，保留列表等结构
         """
         if not text:
             return ""
+        
+        # 处理特殊字符，避免HTML转义问题
+        text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        
+        # 保存列表状态
+        in_ordered_list = False
+        in_unordered_list = False
+        list_html = ""
+        result = []
+        
+        # 先处理列表 - 将整个文本分行处理
+        lines = text.split('\n')
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
             
-        # 定义要移除的Markdown格式
+            # 检查是否是有序列表项
+            ordered_list_match = re.match(r'^(\d+)\.[ \t]+(.*)', line)
+            if ordered_list_match:
+                if not in_ordered_list:
+                    # 开始新的有序列表
+                    if list_html:
+                        result.append(list_html)
+                    list_html = "<ol>"
+                    in_ordered_list = True
+                    in_unordered_list = False
+                
+                # 添加列表项
+                list_html += f"<li>{ordered_list_match.group(2)}</li>"
+            
+            # 检查是否是无序列表项
+            elif re.match(r'^[-*+][ \t]+', line):
+                content = re.sub(r'^[-*+][ \t]+', '', line)
+                if not in_unordered_list:
+                    # 开始新的无序列表
+                    if list_html:
+                        result.append(list_html)
+                    list_html = "<ul>"
+                    in_unordered_list = True
+                    in_ordered_list = False
+                
+                # 添加列表项
+                list_html += f"<li>{content}</li>"
+            
+            else:
+                # 不是列表项，如果正在处理列表则结束列表
+                if in_ordered_list:
+                    list_html += "</ol>"
+                    result.append(list_html)
+                    list_html = ""
+                    in_ordered_list = False
+                elif in_unordered_list:
+                    list_html += "</ul>"
+                    result.append(list_html)
+                    list_html = ""
+                    in_unordered_list = False
+                
+                # 添加普通段落
+                if line:
+                    result.append(line)
+                else:
+                    result.append("<br>")
+            
+            i += 1
+        
+        # 处理可能未关闭的列表
+        if in_ordered_list:
+            list_html += "</ol>"
+            result.append(list_html)
+        elif in_unordered_list:
+            list_html += "</ul>"
+            result.append(list_html)
+        
+        # 合并处理列表后的结果
+        text = "\n".join(result)
+        
+        # 移除不需要的Markdown格式但保留内容
         replacements = [
             # 移除标题标记
             (r'#{1,6}\s+(.+?)(?:\n|$)', r'\1\n'),
@@ -365,21 +440,34 @@ class EmailSender:
             (r'\*([^\*]+?)\*', r'\1'),
             (r'_([^_]+?)_', r'\1'),
             # 移除分隔符
-            (r'(-{3,}|\*{3,}|_{3,})\n', r'\n'),
-            # 移除列表标记
-            (r'^\s*[-*+]\s+(.+?)(?:\n|$)', r'\1\n'),
-            (r'^\s*\d+\.\s+(.+?)(?:\n|$)', r'\1\n'),
-            # 移除引用符号
-            (r'^\s*>\s*(.+?)(?:\n|$)', r'\1\n'),
+            (r'(-{3,}|\*{3,}|_{3,})\n', r'<hr>\n'),
+            # 处理引用为HTML blockquote
+            (r'(?:^|\n)>\s*(.+?)(?:\n|$)', r'\n<blockquote>\1</blockquote>\n'),
             # 移除代码块
             (r'```[\s\S]*?```', r''),
             # 移除行内代码
             (r'`(.+?)`', r'\1'),
+            # 处理链接，保留链接文字
+            (r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>'),
+            # 处理换行符
+            (r'\n\n+', r'<br><br>'),
+            # 确保段落有正确的HTML标签
+            (r'<br><br>', r'</p><p>'),
         ]
         
         # 应用替换规则
         for pattern, replacement in replacements:
             text = re.sub(pattern, replacement, text)
+        
+        # 确保整个文本被段落标签包裹
+        if not text.startswith('<'):
+            text = f"<p>{text}"
+        if not text.endswith('>'):
+            text = f"{text}</p>"
+        
+        # 替换连续的换行为空行
+        text = text.replace("\n\n", "<br>")
+        text = text.replace("\n", " ")
         
         return text
     

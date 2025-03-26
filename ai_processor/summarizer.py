@@ -154,9 +154,7 @@ class NewsSummarizer:
         # 调用AI
         response = self.ai_service.call_ai(prompt, max_retries=2)
         
-        # 尝试从AI响应中提取标题和正文
-        # 查找标题标记
-        translated_title = None
+        # 处理AI响应
         brief = response.strip()
         
         # 只有当原标题不是中文时才尝试提取翻译的标题
@@ -166,7 +164,8 @@ class NewsSummarizer:
             title_patterns = [
                 r"(?:标题[：:]\s*)(.+?)(?:\n|$)",   # 标题：翻译的标题
                 r"(?:^|\n)#\s+(.+?)(?:\n|$)",      # # 翻译的标题
-                r"(?:^|\n)【(.+?)】(?:\n|$)"       # 【翻译的标题】
+                r"(?:^|\n)【(.+?)】(?:\n|$)",      # 【翻译的标题】
+                r"(?:^|\n)「(.+?)」(?:\n|$)"       # 「翻译的标题」
             ]
             
             for pattern in title_patterns:
@@ -175,25 +174,22 @@ class NewsSummarizer:
                     translated_title = match.group(1).strip()
                     # 移除已提取的标题部分
                     brief = re.sub(pattern, '', brief, 1).strip()
+                    
+                    # 如果找到了翻译的标题，更新内容
+                    if translated_title and translated_title != original_title:
+                        logger.info(f"提取到翻译标题: '{translated_title}'")
+                        # 保存原始标题
+                        if "original_title" not in content:
+                            content["original_title"] = original_title
+                        # 更新为翻译的标题
+                        content["title"] = translated_title
                     break
-            
-            # 如果找到了翻译的标题，更新内容
-            if translated_title and translated_title != original_title:
-                logger.info(f"提取到翻译标题: '{translated_title}'")
-                # 保存原始标题
-                if "original_title" not in content:
-                    content["original_title"] = original_title
-                # 更新为翻译的标题
-                content["title"] = translated_title
-        
-        # 处理简报内容，移除可能的引号或多余格式
-        brief = brief.strip().strip('"\'')
         
         # 验证简报内容
         if len(brief) < 50:  # 简报过短表示可能有问题
             raise AiException(f"生成的简报内容过短 ({len(brief)} 字符)")
             
-        return brief
+        return brief.strip()
     
     def _build_summary_prompt(self, title: str, content: str) -> str:
         """构建用于生成简报的提示词
@@ -208,9 +204,6 @@ class NewsSummarizer:
         # 限制内容长度，避免超过AI上下文限制
         if len(content) > 6000:
             content = content[:6000] + "..."
-            
-        # 构建提示词
-        current_date = datetime.now().strftime("%Y年%m月%d日")
         
         # 检测标题是否已经是中文
         is_chinese = self._is_chinese_title(title)
@@ -218,36 +211,29 @@ class NewsSummarizer:
         # 根据简报风格调整提示词
         style_description = ""
         if self.brief_style == "informative":
-            style_description = "信息丰富、客观的"
+            style_description = "客观、信息丰富的"
         elif self.brief_style == "concise":
             style_description = "简明扼要的"
         elif self.brief_style == "conversational":
-            style_description = "对话式、通俗易懂的"
-        
-        # 根据标题语言调整提示词
-        title_instruction = ""
-        if is_chinese:
-            title_instruction = "新闻标题已经是中文，无需翻译。"
-        else:
-            title_instruction = "新闻标题不是中文，请将标题翻译成中文。在回复中，先输出'标题：你翻译的中文标题'，然后空一行再输出简报正文。"
+            style_description = "通俗易懂的"
             
-        return f"""请为以下新闻生成一个{style_description}内容简报。简报语言请使用中文，但人名等特殊名词可以不翻译。
+        return f"""请为以下新闻内容提供一个{style_description}中文摘要。摘要应帮助读者快速理解文章的主要内容，以便决定是否阅读原文。
 
-{title_instruction}
+{'如果原标题不是中文，请将标题翻译成中文，并以"标题：翻译后的标题"格式置于摘要之前。' if not is_chinese else '文章标题已经是中文，无需翻译。'}
 
-简报务必遵循以下要求：
-简报应该是完整的，有开头有结尾，包含新闻的主要信息点，让读者能快速了解新闻的要点。
-简报内容应该简洁明了，尽量简短，但不要过于简略以至于缺失重要信息。
-简报里的所有内容都必须基于新闻原文，不要编造任何信息。
-简报里只应包含新闻相关信息，不要添加额外信息如“当前时间”、“简报开始”、“简报结束”等。
-简报以纯文本方式输出，不要添加任何markdown格式。
+请遵循以下要求：
+1. 摘要应包含文章的核心信息和要点，保持完整性和可读性
+2. 语言简洁清晰，不要过于冗长
+3. 所有内容必须基于原文，不要添加未在原文中提及的信息
+4. 不要使用"新闻简报"、"摘要"、"总结"等词作为开头
+5. 不要包含"简报结束"、"以上就是..."等作为结尾
+6. 不要包含当前日期、来源信息、参考链接等元数据
+7. 直接输出摘要内容，不要添加额外的解释或说明
 
 标题：{title}
 
 内容：
 {content}
 
-当前日期：{current_date}
-
-{"如果标题需要翻译，请按照'标题：翻译后的标题'和正文的格式返回。" if not is_chinese else "请直接返回简报内容。"}
+{'请先提供翻译后的中文标题（格式为"标题：翻译标题"），然后空一行再给出摘要。' if not is_chinese else '请直接提供摘要内容。'}
 """
