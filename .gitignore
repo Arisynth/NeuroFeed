@@ -193,3 +193,7 @@ ENV/
 .vscode/
 *.swp
 .DS_Store
+
+# Other test files
+.atom
+.rss
