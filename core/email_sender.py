@@ -262,7 +262,12 @@ class EmailSender:
             news_brief = content.get("news_brief", "无内容")
             # 将Markdown转换为HTML，而不是完全移除
             news_brief = self._convert_markdown_to_html(news_brief)
+            
+            # 修复微博链接
             link = content.get("link", "#")
+            if link.startswith("https://weibo.com/"):
+                link = self._fix_weibo_link(link)
+                
             source = content.get("source", "未知来源")
             
             # 获取并格式化发布时间
@@ -341,7 +346,44 @@ class EmailSender:
         """
         
         return html
+    
+    def _fix_weibo_link(self, url: str) -> str:
+        """修复微博链接中的参数问题
         
+        Args:
+            url: 原始微博链接
+            
+        Returns:
+            修复后的微博链接
+        """
+        if not url.startswith("https://weibo.com/"):
+            return url
+            
+        try:
+            # 正则表达式提取微博用户ID和微博ID
+            # 处理类似 https://weibo.com/6983642457&displayvideo=false&showRetweeted=false/PkGZf9Jll 的情况
+            pattern = r"https://weibo\.com/(\d+)(?:&[^/]+)*/([a-zA-Z0-9]+)"
+            match = re.match(pattern, url)
+            
+            if match:
+                user_id = match.group(1)
+                weibo_id = match.group(2)
+                # 生成正确格式的微博链接
+                return f"https://weibo.com/{user_id}/{weibo_id}"
+            
+            # 处理其他可能带有参数的微博链接
+            pattern = r"(https://weibo\.com/\d+/[a-zA-Z0-9]+)(?:\?.*|&.*)"
+            match = re.match(pattern, url)
+            if match:
+                return match.group(1)
+                
+            # 如果以上都不匹配，返回原链接
+            return url
+            
+        except Exception as e:
+            logger.warning(f"修复微博链接时出错: {str(e)}")
+            return url
+    
     def _convert_markdown_to_html(self, text: str) -> str:
         """将Markdown格式转换为HTML格式，保留结构但移除不需要的标记
         

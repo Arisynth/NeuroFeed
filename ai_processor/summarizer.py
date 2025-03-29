@@ -87,13 +87,23 @@ class NewsSummarizer:
         title = content.get("title", "")
         article_content = content.get("content", "")
         
+        # 处理标题过长的情况
+        if len(title) > 70:
+            title = self._summarize_long_title(title)
+            content["original_title"] = content.get("title", "")
+            content["title"] = title
+            logger.info(f"标题过长已简化为: {title}")
+            
         # 记录原内容长度
         original_content_length = len(article_content)
         logger.info(f"原始内容长度: {original_content_length} 字符")
         
-        # 如果文章内容为空或太短，报错
+        # 如果文章内容为空或太短，直接使用原内容作为简报
         if not article_content or len(article_content) < 100:
-            raise AiException("内容太短，无法生成有意义的简报")
+            logger.warning(f"内容太短 ({len(article_content)} 字符)，直接使用原内容作为简报")
+            content["news_brief"] = article_content or "无内容可显示"
+            content["summary_method"] = "original"
+            return content
         
         # 使用AI生成简报
         news_brief = self._generate_ai_summary(content)
@@ -110,6 +120,49 @@ class NewsSummarizer:
         logger.info(f"生成的简报内容: \n{news_brief}")
         
         return content
+    
+    def _summarize_long_title(self, title: str) -> str:
+        """对过长的标题进行简化摘要
+        
+        Args:
+            title: 原始标题
+            
+        Returns:
+            简化后的标题
+        """
+        if len(title) <= 70:
+            return title
+            
+        logger.info(f"标题过长 ({len(title)} 字符)，正在生成简化标题")
+        
+        try:
+            # 准备AI提示词
+            prompt = f"""请为以下过长的标题生成一个简短版本，控制在70个字符以内，同时保持原意：
+
+{title}
+
+请直接输出简化后的标题，不要添加任何解释或前缀。"""
+
+            # 调用AI
+            response = self.ai_service.call_ai(prompt, max_retries=2)
+            
+            # 处理AI响应
+            short_title = response.strip()
+            
+            # 确保标题确实被缩短了
+            if len(short_title) > 70:
+                short_title = short_title[:67] + "..."
+                
+            # 验证简化标题不为空
+            if not short_title:
+                return title[:67] + "..."
+                
+            return short_title
+            
+        except Exception as e:
+            logger.error(f"简化标题时出错: {str(e)}")
+            # 如果AI简化失败，使用简单截断
+            return title[:67] + "..."
     
     def _is_chinese_title(self, text: str) -> bool:
         """检测标题是否已经主要是中文
