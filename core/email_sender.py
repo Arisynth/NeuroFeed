@@ -422,8 +422,10 @@ class EmailSender:
                     in_ordered_list = True
                     in_unordered_list = False
                 
-                # 添加列表项
-                list_html += f"<li>{ordered_list_match.group(2)}</li>"
+                # 添加列表项，使用原始数字作为值来保持编号一致性
+                number = ordered_list_match.group(1)
+                content = ordered_list_match.group(2)
+                list_html += f'<li value="{number}">{content}</li>'
             
             # 检查是否是无序列表项
             elif re.match(r'^[-*+][ \t]+', line):
