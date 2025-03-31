@@ -396,6 +396,9 @@ class EmailSender:
         if not text:
             return ""
         
+        # 移除 <em> 标签
+        text = re.sub(r'<\/?em>', '', text)
+        
         # 处理特殊字符，避免HTML转义问题
         text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         
