@@ -83,7 +83,82 @@ class RssParser:
             # Use special handling for WeChat sources
             if is_wechat_source:
                 logger.info(f"Detected WeChat source, using specialized parser: {feed_url}")
-                return self.wechat_parser.parse_wechat_source(feed_url, items_count)
+                wechat_result = self.wechat_parser.parse_wechat_source(feed_url, items_count)
+                
+                # If WeChat parsing failed, return the error
+                if wechat_result["status"] != "success":
+                    return wechat_result
+                
+                # Process WeChat items and store them in the database
+                processed_entries = []
+                skipped_count = 0
+                total_entries = len(wechat_result["items"])
+                
+                for entry in wechat_result["items"]:
+                    # Generate a unique ID for this WeChat article
+                    title = entry.get('title', 'No Title')
+                    link = entry.get('link', feed_url)
+                    
+                    # Use link + title as article_id since WeChat articles don't have consistent IDs
+                    article_id = f"wechat_{hashlib.md5((link + title).encode()).hexdigest()}"
+                    
+                    # Check if we should skip this article
+                    skip_article = False
+                    skip_reason = ""
+                    
+                    if self.skip_processed:
+                        # 检查是否对此任务丢弃过
+                        if task_id and self.db_manager.is_article_discarded_for_task(article_id, task_id):
+                            skip_article = True
+                            skip_reason = f"在任务 {task_id} 中被丢弃过"
+                        # 检查是否所有收件人都已收到
+                        elif recipients and self.db_manager.is_article_sent_to_all_recipients(article_id, recipients):
+                            skip_article = True
+                            skip_reason = "所有收件人已收到"
+                    
+                    if skip_article:
+                        skipped_count += 1
+                        logger.info(f"跳过微信文章: {title} - 原因: {skip_reason}")
+                        continue
+                    
+                    # Generate content hash
+                    content = entry.get('content', '')
+                    content_hash = hashlib.md5(content.encode()).hexdigest() if content else None
+                    
+                    # Store in database
+                    self.db_manager.add_news_article(
+                        article_id=article_id,
+                        title=title,
+                        link=link,
+                        source=entry.get('source', '微信公众号'),
+                        published_date=entry.get('published', datetime.now().isoformat()),
+                        content_hash=content_hash
+                    )
+                    
+                    # Add article_id to entry
+                    entry["article_id"] = article_id
+                    processed_entries.append(entry)
+                
+                elapsed_time = time.time() - start_time
+                logger.info(f"\n============ WeChat Feed获取完成 ============")
+                logger.info(f"Feed URL: {feed_url}")
+                logger.info(f"获取条目数: {len(processed_entries)}")
+                logger.info(f"耗时: {elapsed_time:.2f}秒")
+                
+                return {
+                    "status": "success",
+                    "items": processed_entries,
+                    "feed_info": {
+                        "title": processed_entries[0].get('source', '微信公众号') if processed_entries else "未知",
+                        "description": "微信公众号内容",
+                        "link": feed_url
+                    },
+                    "stats": {
+                        "total_available": total_entries,
+                        "processed": len(processed_entries),
+                        "skipped": skipped_count
+                    }
+                }
             
             # 使用feedparser解析RSS Feed
             logger.info(f"解析RSS Feed: {feed_url}")

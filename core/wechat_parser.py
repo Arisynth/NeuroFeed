@@ -1,5 +1,6 @@
 import requests
 import logging
+import hashlib
 from datetime import datetime
 from bs4 import BeautifulSoup
 from typing import Dict, Any, List
@@ -55,6 +56,13 @@ class WeChatParser:
             
             # If we have items, return them
             if items:
+                # Ensure each item has a title, link, and unique identifier for database tracking
+                for item in items:
+                    if not item.get('title'):
+                        item['title'] = "未知标题"
+                    if not item.get('link'):
+                        item['link'] = feed_url
+                
                 logger.info(f"Successfully extracted {len(items)} items from source: {feed_title or '未知来源'}")
                 return {
                     "status": "success",
