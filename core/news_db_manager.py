@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import datetime
+import re
 from pathlib import Path
 
 class NewsDBManager:
@@ -68,6 +69,67 @@ class NewsDBManager:
         conn.commit()
         conn.close()
     
+    def normalize_article_id(self, article_id):
+        """
+        规范化文章ID，特别处理微博和微信公众号链接
+        
+        Args:
+            article_id (str): 原始文章标识符，通常是URL
+            
+        Returns:
+            str: 规范化后的文章标识符
+        """
+        if not isinstance(article_id, str):
+            return article_id
+            
+        # 处理微博链接 - 移除查询参数
+        if "weibo.com" in article_id:
+            # 处理类似 https://weibo.com/6983642457&displayvideo=false&showRetweeted=false/PkGZf9Jll 的情况
+            pattern = r"(https://weibo\.com/\d+)(?:&[^/]+)*/([a-zA-Z0-9]+)"
+            match = re.match(pattern, article_id)
+            if match:
+                user_id = match.group(1)
+                weibo_id = match.group(2)
+                return f"{user_id}/{weibo_id}"
+                
+            # 处理其他可能带有参数的微博链接
+            pattern = r"(https://weibo\.com/\d+/[a-zA-Z0-9]+)(?:\?.*|&.*)"
+            match = re.match(pattern, article_id)
+            if match:
+                return match.group(1)
+            
+        # 处理微信公众号链接 - 保留关键参数
+        if "mp.weixin.qq.com" in article_id:
+            # 微信公众号文章通常以 __biz, mid, idx, sn 参数作为唯一标识
+            biz_match = re.search(r"__biz=([^&]+)", article_id)
+            mid_match = re.search(r"mid=([^&]+)", article_id)
+            idx_match = re.search(r"idx=([^&]+)", article_id)
+            sn_match = re.search(r"sn=([^&]+)", article_id)
+            
+            if biz_match and mid_match and idx_match and sn_match:
+                biz = biz_match.group(1)
+                mid = mid_match.group(1)
+                idx = idx_match.group(1)
+                sn = sn_match.group(1)
+                return f"https://mp.weixin.qq.com/s?__biz={biz}&mid={mid}&idx={idx}&sn={sn}"
+                
+            # 如果是简短格式的微信链接(例如 https://mp.weixin.qq.com/s/ABCDEFG)
+            if "/s/" in article_id:
+                parts = article_id.split("/s/")
+                if len(parts) > 1:
+                    identifier = parts[1].split("?")[0].split("#")[0]
+                    return f"https://mp.weixin.qq.com/s/{identifier}"
+            
+        # 对于其他链接，移除常见的无关参数(如utm_source等)
+        pattern = r"(https?://[^?#]+)(?:\?[^#]*)?(#.*)?"
+        match = re.match(pattern, article_id)
+        if match:
+            base_url = match.group(1)
+            fragment = match.group(2) or ""
+            return base_url + fragment
+            
+        return article_id
+    
     def add_news_article(self, article_id, title, link, source, published_date=None, content_hash=None):
         """
         Add a news article to the database.
@@ -84,6 +146,9 @@ class NewsDBManager:
             bool: True if article was added, False if it already exists
         """
         try:
+            # 规范化article_id
+            article_id = self.normalize_article_id(article_id)
+            
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
@@ -153,6 +218,9 @@ class NewsDBManager:
         Returns:
             bool: True if article exists, False otherwise
         """
+        # 规范化article_id
+        article_id = self.normalize_article_id(article_id)
+        
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -173,6 +241,9 @@ class NewsDBManager:
             bool: True if successful, False otherwise
         """
         try:
+            # 规范化article_id
+            article_id = self.normalize_article_id(article_id)
+            
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
@@ -204,6 +275,9 @@ class NewsDBManager:
             bool: True if processed, False if not processed or article doesn't exist
         """
         try:
+            # 规范化article_id
+            article_id = self.normalize_article_id(article_id)
+            
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
@@ -254,6 +328,9 @@ class NewsDBManager:
             bool: True if successful, False otherwise
         """
         try:
+            # 规范化article_id
+            article_id = self.normalize_article_id(article_id)
+            
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
@@ -284,6 +361,9 @@ class NewsDBManager:
             bool: True if article was discarded for the task, False otherwise
         """
         try:
+            # 规范化article_id
+            article_id = self.normalize_article_id(article_id)
+            
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
@@ -313,6 +393,9 @@ class NewsDBManager:
             bool: True if successful, False otherwise
         """
         try:
+            # 规范化article_id
+            article_id = self.normalize_article_id(article_id)
+            
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
@@ -343,6 +426,9 @@ class NewsDBManager:
             bool: True if article was sent to the recipient, False otherwise
         """
         try:
+            # 规范化article_id
+            article_id = self.normalize_article_id(article_id)
+            
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
@@ -377,3 +463,90 @@ class NewsDBManager:
             if not self.is_article_sent_to_recipient(article_id, recipient):
                 return False
         return True
+    
+    def migrate_normalize_article_ids(self):
+        """
+        迁移数据库中的所有article_id到规范化格式
+        这个方法应该在应用升级后执行一次，以确保历史数据与新的规范化逻辑一致
+        
+        Returns:
+            dict: 包含迁移统计信息的字典
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            stats = {
+                'news_articles': 0,
+                'discarded_articles': 0,
+                'sent_articles': 0,
+                'duplicates_removed': 0,
+                'errors': 0
+            }
+            
+            # 处理主文章表
+            cursor.execute("SELECT id, article_id FROM news_articles")
+            articles = cursor.fetchall()
+            for id, article_id in articles:
+                normalized_id = self.normalize_article_id(article_id)
+                if normalized_id != article_id:
+                    try:
+                        # 检查规范化后的ID是否已存在
+                        cursor.execute("SELECT id FROM news_articles WHERE article_id = ?", (normalized_id,))
+                        existing = cursor.fetchone()
+                        
+                        if existing:
+                            # 如果已存在规范化的ID，则合并记录并删除当前记录
+                            # 将旧记录的processed状态转移到新记录
+                            cursor.execute("SELECT processed FROM news_articles WHERE id = ?", (id,))
+                            is_processed = cursor.fetchone()[0]
+                            if is_processed:
+                                cursor.execute("UPDATE news_articles SET processed = 1 WHERE article_id = ?", (normalized_id,))
+                            
+                            # 删除旧记录
+                            cursor.execute("DELETE FROM news_articles WHERE id = ?", (id,))
+                            stats['duplicates_removed'] += 1
+                        else:
+                            # 更新为规范化的ID
+                            cursor.execute("UPDATE news_articles SET article_id = ? WHERE id = ?", (normalized_id, id))
+                            stats['news_articles'] += 1
+                    except Exception as e:
+                        print(f"Error migrating article {article_id}: {e}")
+                        stats['errors'] += 1
+            
+            # 处理已丢弃文章表
+            cursor.execute("SELECT id, article_id FROM discarded_articles")
+            discarded = cursor.fetchall()
+            for id, article_id in discarded:
+                normalized_id = self.normalize_article_id(article_id)
+                if normalized_id != article_id:
+                    try:
+                        cursor.execute("UPDATE discarded_articles SET article_id = ? WHERE id = ?", (normalized_id, id))
+                        stats['discarded_articles'] += 1
+                    except Exception as e:
+                        print(f"Error migrating discarded article {article_id}: {e}")
+                        stats['errors'] += 1
+            
+            # 处理已发送文章表
+            cursor.execute("SELECT id, article_id FROM sent_articles")
+            sent = cursor.fetchall()
+            for id, article_id in sent:
+                normalized_id = self.normalize_article_id(article_id)
+                if normalized_id != article_id:
+                    try:
+                        cursor.execute("UPDATE sent_articles SET article_id = ? WHERE id = ?", (normalized_id, id))
+                        stats['sent_articles'] += 1
+                    except Exception as e:
+                        print(f"Error migrating sent article {article_id}: {e}")
+                        stats['errors'] += 1
+            
+            # 提交所有更改
+            conn.commit()
+            conn.close()
+            
+            total_updated = stats['news_articles'] + stats['discarded_articles'] + stats['sent_articles']
+            print(f"数据库迁移完成: {total_updated} 条记录已更新, {stats['duplicates_removed']} 条重复记录已合并, {stats['errors']} 个错误")
+            return stats
+            
+        except Exception as e:
+            print(f"数据库迁移失败: {str(e)}")
+            return {'error': str(e)}
