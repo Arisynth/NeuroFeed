@@ -175,12 +175,12 @@ class NewsDBManager:
             print(f"Error adding article to database: {e}")
             return False
     
-    def clean_old_articles(self, days=7):
+    def clean_old_articles(self, days=30):
         """
         Remove articles older than specified number of days.
         
         Args:
-            days (int): Number of days to keep articles (default: 7)
+            days (int): Number of days to keep articles (default: 30)
             
         Returns:
             int: Number of articles removed
