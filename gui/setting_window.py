@@ -8,11 +8,12 @@ import json
 from gui.tag_editor import TagEditor  # 导入标签编辑器
 from core.email_sender import EmailSender
 from core.encryption import encrypt_password, decrypt_password
+from core.localization import get_text, get_current_language, set_language
 
 class SettingsWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Settings")
+        self.setWindowTitle(get_text("settings"))
         self.setMinimumSize(500, 400)
         
         # 记录原始配置用于检测更改
@@ -51,9 +52,9 @@ class SettingsWindow(QDialog):
         # Buttons
         button_layout = QHBoxLayout()
         
-        self.test_email_btn = QPushButton("Test Email Settings")
-        self.save_btn = QPushButton("Save")
-        self.close_btn = QPushButton("Close")
+        self.test_email_btn = QPushButton(get_text("test_email"))
+        self.save_btn = QPushButton(get_text("save"))
+        self.close_btn = QPushButton(get_text("close"))
         
         self.test_email_btn.clicked.connect(self.test_email_settings)
         self.save_btn.clicked.connect(self.save_settings)
@@ -97,6 +98,7 @@ class SettingsWindow(QDialog):
         self.minimize_to_tray.stateChanged.connect(self.mark_as_changed)
         self.show_notifications.stateChanged.connect(self.mark_as_changed)
         self.skip_processed_checkbox.stateChanged.connect(self.mark_as_changed)
+        self.language_combo.currentIndexChanged.connect(self.mark_as_changed)
     
     def mark_as_changed(self):
         """标记有未保存的更改"""
@@ -108,7 +110,7 @@ class SettingsWindow(QDialog):
         email_layout = QVBoxLayout(email_tab)
         
         # SMTP Server Group
-        smtp_group = QGroupBox("SMTP Server Settings")
+        smtp_group = QGroupBox(get_text("smtp_server_settings"))
         smtp_form = QFormLayout(smtp_group)
         
         # Get email settings from config
@@ -127,12 +129,12 @@ class SettingsWindow(QDialog):
             email_settings.get("smtp_security", "STARTTLS"), 1)
         self.smtp_security.setCurrentIndex(security_index)
         
-        smtp_form.addRow("SMTP Server:", self.smtp_server)
-        smtp_form.addRow("Port:", self.smtp_port)
-        smtp_form.addRow("Security:", self.smtp_security)
+        smtp_form.addRow(f"{get_text('smtp_server')}:", self.smtp_server)
+        smtp_form.addRow(f"{get_text('port')}:", self.smtp_port)
+        smtp_form.addRow(f"{get_text('security')}:", self.smtp_security)
         
         # Authentication Group
-        auth_group = QGroupBox("Authentication Settings")
+        auth_group = QGroupBox(get_text("authentication_settings"))
         auth_form = QFormLayout(auth_group)
         
         # 如果密码已加密，解密显示
@@ -142,18 +144,18 @@ class SettingsWindow(QDialog):
         self.sender_email = QLineEdit(email_settings.get("sender_email", ""))
         self.email_password = QLineEdit(decrypted_password)
         self.email_password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.remember_password = QCheckBox("Remember password")
+        self.remember_password = QCheckBox(get_text("remember_password"))
         self.remember_password.setChecked(email_settings.get("remember_password", False))
         
-        auth_form.addRow("Sender Email:", self.sender_email)
-        auth_form.addRow("Password:", self.email_password)
+        auth_form.addRow(f"{get_text('sender_email')}:", self.sender_email)
+        auth_form.addRow(f"{get_text('password')}:", self.email_password)
         auth_form.addRow("", self.remember_password)
         
         email_layout.addWidget(smtp_group)
         email_layout.addWidget(auth_group)
         email_layout.addStretch()
         
-        self.tabs.addTab(email_tab, "Email")
+        self.tabs.addTab(email_tab, get_text("email"))
 
     def on_smtp_server_changed(self, server):
         """Handle SMTP server text change to auto-detect OAuth requirements"""
@@ -163,10 +165,8 @@ class SettingsWindow(QDialog):
         if "office365" in server or "outlook" in server:
             self.auth_method.setCurrentText("OAuth 2.0")
             # 更新为更强硬的警告，表明没有其他选择
-            QMessageBox.warning(self, "Microsoft Authentication", 
-                "Microsoft已完全禁用密码认证！\n\n"
-                "对于Office 365或Outlook邮箱，唯一可用的选项是OAuth 2.0认证。\n\n"
-                "请按照'How to get OAuth credentials'按钮的指引完成配置。")
+            QMessageBox.warning(self, get_text("microsoft_auth"), 
+                get_text("microsoft_auth_warning"))
 
     def on_auth_method_changed(self, index):
         """Switch between authentication methods"""
@@ -181,60 +181,12 @@ class SettingsWindow(QDialog):
     def show_oauth_help(self):
         """Show help dialog for obtaining OAuth credentials"""
         msg = QMessageBox(self)
-        msg.setWindowTitle("OAuth Setup Instructions")
+        msg.setWindowTitle(get_text("oauth_setup"))
         msg.setIcon(QMessageBox.Icon.Information)
         
-        help_text = """
-<h3>How to set up OAuth 2.0 for Microsoft Email</h3>
-
-<ol>
-<li><b>Register an application in Azure Portal:</b>
-    <ul>
-    <li>Go to <a href="https://portal.azure.com/">Azure Portal</a></li>
-    <li>Navigate to "Azure Active Directory" > "App registrations" > "New registration"</li>
-    <li>Name your application (e.g., "NewsDigest Email")</li>
-    <li>For "Supported account types" select "Accounts in any organizational directory and personal Microsoft accounts"</li>
-    <li>Leave Redirect URI empty and click "Register"</li>
-    </ul>
-</li>
-
-<li><b>Get the Application (client) ID:</b>
-    <ul>
-    <li>After registration, copy the "Application (client) ID" from the overview page</li>
-    <li>This is your <b>Client ID</b></li>
-    </ul>
-</li>
-
-<li><b>Create a client secret:</b>
-    <ul>
-    <li>Go to "Certificates & secrets" > "Client secrets" > "New client secret"</li>
-    <li>Add a description and select expiration period</li>
-    <li>Click "Add" and immediately copy the secret value</li>
-    <li>This is your <b>Client Secret</b></li>
-    </ul>
-</li>
-
-<li><b>Configure API permissions:</b>
-    <ul>
-    <li>Go to "API permissions" > "Add a permission"</li>
-    <li>Select "Microsoft Graph" > "Application permissions"</li>
-    <li>Search for and add: "SMTP.Send"</li>
-    <li>Click "Grant admin consent"</li>
-    </ul>
-</li>
-
-<li><b>Get Tenant ID (optional):</b>
-    <ul>
-    <li>For organizational accounts, copy the "Directory (tenant) ID" from the overview page</li>
-    <li>For personal accounts, use "common" as the Tenant ID</li>
-    </ul>
-</li>
-</ol>
-
-<p>After completing these steps, enter the values in the corresponding fields.</p>
-"""
+        help_text = get_text("oauth_help_text")
         
-        msg.setText("Setting up OAuth 2.0 for Microsoft Email")
+        msg.setText(get_text("oauth_setup_title"))
         msg.setInformativeText(help_text)
         msg.setStandardButtons(QMessageBox.StandardButton.Ok)
         msg.exec()
@@ -242,27 +194,12 @@ class SettingsWindow(QDialog):
     def show_app_password_help(self):
         """显示密码认证已被禁用的帮助对话框"""
         msg = QMessageBox(self)
-        msg.setWindowTitle("Microsoft Authentication")
+        msg.setWindowTitle(get_text("microsoft_auth"))
         msg.setIcon(QMessageBox.Icon.Warning)
         
-        help_text = """
-<h3>Microsoft已禁用密码认证</h3>
-
-<p>Microsoft已禁用所有形式的密码认证(包括常规密码和应用密码)。</p>
-
-<p>对于Microsoft账户(Office 365或Outlook)，<b>唯一可用的选项是OAuth 2.0认证</b>。</p>
-
-<p>请切换到OAuth 2.0认证方式并配置以下必要信息：</p>
-<ul>
-<li>Client ID (从Azure应用注册获取)</li>
-<li>Client Secret (从Azure应用注册获取)</li>
-<li>租户ID (通常使用您的实际租户ID)</li>
-</ul>
-
-<p>点击"How to get OAuth credentials"按钮获取详细设置步骤。</p>
-"""
+        help_text = get_text("microsoft_auth_disabled")
         
-        msg.setText("Microsoft已禁用密码认证")
+        msg.setText(get_text("microsoft_auth_disabled_title"))
         msg.setInformativeText(help_text)
         msg.setStandardButtons(QMessageBox.StandardButton.Ok)
         msg.exec()
@@ -273,7 +210,7 @@ class SettingsWindow(QDialog):
         ai_layout = QVBoxLayout(ai_tab)
         
         # AI Provider Group
-        provider_group = QGroupBox("AI Provider")
+        provider_group = QGroupBox(get_text("ai_provider"))
         provider_layout = QVBoxLayout(provider_group)
         
         # Get AI settings from config
@@ -297,7 +234,7 @@ class SettingsWindow(QDialog):
         provider_layout.addWidget(self.ai_provider)
         
         # Ollama settings
-        self.ollama_group = QGroupBox("Ollama Settings")
+        self.ollama_group = QGroupBox(get_text("ollama_settings"))
         ollama_form = QFormLayout(self.ollama_group)
         
         self.ollama_host = QLineEdit(ai_settings.get("ollama_host", "http://localhost:11434"))
@@ -305,7 +242,7 @@ class SettingsWindow(QDialog):
         # Ollama model with refresh button
         model_layout = QHBoxLayout()
         self.ollama_model = QComboBox()
-        self.refresh_models_btn = QPushButton("Refresh")
+        self.refresh_models_btn = QPushButton(get_text("refresh"))
         self.refresh_models_btn.clicked.connect(self.fetch_ollama_models)
         
         model_layout.addWidget(self.ollama_model, 1)
@@ -317,14 +254,14 @@ class SettingsWindow(QDialog):
         # Try to get the models from Ollama
         self.fetch_ollama_models()
         
-        ollama_form.addRow("Ollama Host:", self.ollama_host)
-        ollama_form.addRow("Model:", model_layout)
+        ollama_form.addRow(f"{get_text('ollama_host')}:", self.ollama_host)
+        ollama_form.addRow(f"{get_text('model')}:", model_layout)
         
         # Connect host change to model refresh
         self.ollama_host.editingFinished.connect(self.fetch_ollama_models)
         
         # OpenAI settings
-        self.openai_group = QGroupBox("OpenAI Settings")
+        self.openai_group = QGroupBox(get_text("openai_settings"))
         openai_form = QFormLayout(self.openai_group)
         
         self.openai_key = QLineEdit(ai_settings.get("openai_key", ""))
@@ -338,8 +275,8 @@ class SettingsWindow(QDialog):
         openai_model_index = openai_models.index(current_openai_model) if current_openai_model in openai_models else 2
         self.openai_model.setCurrentIndex(openai_model_index)
         
-        openai_form.addRow("API Key:", self.openai_key)
-        openai_form.addRow("Model:", self.openai_model)
+        openai_form.addRow(f"{get_text('api_key')}:", self.openai_key)
+        openai_form.addRow(f"{get_text('model')}:", self.openai_model)
         
         # 硅基流动设置
         self.siliconflow_group = QGroupBox("硅基流动 (Silicon Flow) 设置")
@@ -390,7 +327,7 @@ class SettingsWindow(QDialog):
         # Set initial visibility based on selected provider
         self.on_ai_provider_changed(self.ai_provider.currentIndex())
         
-        self.tabs.addTab(ai_tab, "AI")
+        self.tabs.addTab(ai_tab, get_text("ai"))
 
     def fetch_ollama_models(self):
         """Fetch available models from Ollama API"""
@@ -398,7 +335,7 @@ class SettingsWindow(QDialog):
         
         # Clear and add a loading indicator
         self.ollama_model.clear()
-        self.ollama_model.addItem("Loading models...")
+        self.ollama_model.addItem(get_text("loading_models"))
         
         try:
             # Make API request to Ollama
@@ -418,11 +355,11 @@ class SettingsWindow(QDialog):
                     if self.current_ollama_model in models:
                         self.ollama_model.setCurrentText(self.current_ollama_model)
                 else:
-                    self.ollama_model.addItem("No models found")
+                    self.ollama_model.addItem(get_text("no_models_found"))
             else:
                 self.ollama_model.clear()
-                self.ollama_model.addItem("Error fetching models")
-                QMessageBox.warning(self, "API Error", f"Failed to fetch models: {response.status_code}")
+                self.ollama_model.addItem(get_text("error_fetching_models"))
+                QMessageBox.warning(self, get_text("api_error"), f"{get_text('failed_fetch_models')}: {response.status_code}")
         except Exception as e:
             self.ollama_model.clear()
             fallback_models = ["llama3", "llama2", "mistral", "phi", "gemma"]
@@ -435,8 +372,8 @@ class SettingsWindow(QDialog):
                 self.ollama_model.addItem(self.current_ollama_model)
                 self.ollama_model.setCurrentText(self.current_ollama_model)
                 
-            QMessageBox.warning(self, "Connection Error", 
-                             f"Could not connect to Ollama at {host_url}.\nUsing default model list.\nError: {str(e)}")
+            QMessageBox.warning(self, get_text("connection_error"), 
+                             f"{get_text('could_not_connect')} {host_url}.\n{get_text('using_default_list')}.\n{get_text('error')}: {str(e)}")
 
     def on_ai_provider_changed(self, index):
         """Show/hide relevant AI provider settings based on the selected provider"""
@@ -459,19 +396,19 @@ class SettingsWindow(QDialog):
         general_layout = QVBoxLayout(general_tab)
         
         # Application behavior group
-        behavior_group = QGroupBox("Application Behavior")
+        behavior_group = QGroupBox(get_text("app_behavior"))
         behavior_form = QFormLayout(behavior_group)
         
         # Get general settings from config
         general_settings = self.global_settings.get("general_settings", {})
         
-        self.start_on_boot = QCheckBox("Start application on system startup")
+        self.start_on_boot = QCheckBox(get_text("start_on_boot"))
         self.start_on_boot.setChecked(general_settings.get("start_on_boot", False))
         
-        self.minimize_to_tray = QCheckBox("Minimize to system tray when closed")
+        self.minimize_to_tray = QCheckBox(get_text("minimize_to_tray"))
         self.minimize_to_tray.setChecked(general_settings.get("minimize_to_tray", True))
         
-        self.show_notifications = QCheckBox("Show notifications")
+        self.show_notifications = QCheckBox(get_text("show_notifications"))
         self.show_notifications.setChecked(general_settings.get("show_notifications", True))
         
         behavior_form.addRow("", self.start_on_boot)
@@ -479,26 +416,40 @@ class SettingsWindow(QDialog):
         behavior_form.addRow("", self.show_notifications)
         
         # 创建临时测试开关 - 跳过已处理文章
-        self.skip_processed_checkbox = QCheckBox("跳过已处理的新闻文章（测试功能）")
+        self.skip_processed_checkbox = QCheckBox(get_text("skip_processed"))
         self.skip_processed_checkbox.setChecked(general_settings.get("skip_processed_articles", False))
-        self.skip_processed_checkbox.setToolTip("启用后，系统将跳过已处理过的新闻文章，避免重复处理")
+        self.skip_processed_checkbox.setToolTip(get_text("skip_processed_tooltip"))
         
         # 添加测试开关到布局中
-        behavior_form.addRow("测试功能:", self.skip_processed_checkbox)
+        behavior_form.addRow(f"{get_text('test_feature')}:", self.skip_processed_checkbox)
+        
+        # 添加语言选择下拉菜单
+        language_layout = QHBoxLayout()
+        self.language_combo = QComboBox()
+        self.language_combo.addItems(["English", "中文 (Chinese)"])
+        
+        # 设置当前语言
+        current_language = general_settings.get("language", "en")
+        self.language_combo.setCurrentIndex(0 if current_language == "en" else 1)
+        
+        language_layout.addWidget(self.language_combo)
+        language_layout.addStretch()
+        
+        behavior_form.addRow(f"{get_text('language')}/语言:", language_layout)
         
         general_layout.addWidget(behavior_group)
         
         # 添加数据管理组
-        data_group = QGroupBox("数据管理")
+        data_group = QGroupBox(get_text("data_management"))
         data_layout = QVBoxLayout(data_group)
         
         # 添加清除缓存按钮
-        clear_cache_btn = QPushButton("清除RSS新闻缓存")
-        clear_cache_btn.setToolTip("清除数据库中存储的所有RSS新闻数据，以便重新获取和处理")
+        clear_cache_btn = QPushButton(get_text("clear_cache"))
+        clear_cache_btn.setToolTip(get_text("clear_cache_tooltip"))
         clear_cache_btn.clicked.connect(self.clear_rss_cache)
         
         # 添加说明标签
-        cache_description = QLabel("点击按钮清除已处理的新闻缓存，确保下次运行时重新获取和处理所有RSS源")
+        cache_description = QLabel(get_text("clear_cache_desc"))
         cache_description.setWordWrap(True)
         cache_description.setStyleSheet("color: #666; font-size: 11px;")
         
@@ -508,15 +459,14 @@ class SettingsWindow(QDialog):
         general_layout.addWidget(data_group)
         general_layout.addStretch()
         
-        self.tabs.addTab(general_tab, "General")
+        self.tabs.addTab(general_tab, get_text("general"))
 
     def clear_rss_cache(self):
         """清除RSS新闻缓存数据库"""
         reply = QMessageBox.question(
             self, 
-            "确认清除缓存", 
-            "确定要清除所有RSS新闻缓存吗？\n\n这将删除数据库中的所有新闻记录，"
-            "确保下次运行任务时重新获取和处理所有RSS条目。",
+            get_text("confirm_clear_cache"), 
+            get_text("clear_cache_prompt"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
@@ -548,20 +498,20 @@ class SettingsWindow(QDialog):
                     conn.commit()
                     conn.close()
                     
-                    QMessageBox.information(self, "缓存已清除", "RSS新闻缓存已成功清除！")
-                    self.status_label.setText("RSS缓存已清除！")
+                    QMessageBox.information(self, get_text("cache_cleared"), get_text("rss_cache_cleared"))
+                    self.status_label.setText(get_text("rss_cache_cleared"))
                     self.status_label.setStyleSheet("color: green;")
                     
                     # 5秒后清除状态消息
                     QTimer.singleShot(5000, self.clear_status)
                 else:
-                    QMessageBox.information(self, "操作完成", "数据库文件不存在，无需清除。")
+                    QMessageBox.information(self, get_text("operation_complete"), get_text("db_file_not_exist"))
                     
             except Exception as e:
                 import traceback
                 error_details = traceback.format_exc()
-                print(f"清除RSS缓存出错: {error_details}")
-                QMessageBox.critical(self, "错误", f"清除缓存时发生错误:\n{str(e)}")
+                print(f"{get_text('error_clearing_cache')}: {error_details}")
+                QMessageBox.critical(self, get_text("error"), f"{get_text('error_clearing_cache')}: {str(e)}")
 
     def create_interests_tab(self):
         """Create user interest tags settings tab"""
@@ -569,7 +519,7 @@ class SettingsWindow(QDialog):
         layout = QVBoxLayout(interests_tab)
         
         # Description label - 移除加粗，左对齐
-        description = QLabel("Set your interest tags that will be automatically applied when adding new RSS feeds:")
+        description = QLabel(get_text("set_interests"))
         description.setWordWrap(True)
         description.setAlignment(Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(description)
@@ -585,10 +535,32 @@ class SettingsWindow(QDialog):
         layout.addWidget(self.tag_editor)
         layout.addStretch()
         
-        self.tabs.addTab(interests_tab, "Interest Tags")
+        self.tabs.addTab(interests_tab, get_text("interest_tags"))
 
     def save_settings(self):
         """保存所有设置但不关闭窗口"""
+        # 确保获取最新的语言设置
+        current_general_settings = get_general_settings()
+        prev_language = current_general_settings.get("language", "en")
+        current_language = "en" if self.language_combo.currentIndex() == 0 else "zh"
+        language_changed = prev_language != current_language
+
+        # 打印调试信息
+        print(f"[DEBUG] Previous language: {prev_language}")
+        print(f"[DEBUG] Current language selection: {current_language}")
+        
+        # General settings
+        general_settings = {
+            "start_on_boot": self.start_on_boot.isChecked(),
+            "minimize_to_tray": self.minimize_to_tray.isChecked(),
+            "show_notifications": self.show_notifications.isChecked(),
+            "skip_processed_articles": self.skip_processed_checkbox.isChecked(),
+            "language": current_language  # 确保这里设置了语言
+        }
+        
+        # 首先更新通用设置
+        update_general_settings(general_settings)
+        
         # Email settings
         email_settings = {
             "smtp_server": self.smtp_server.text(),
@@ -597,7 +569,6 @@ class SettingsWindow(QDialog):
             "sender_email": self.sender_email.text(),
         }
         
-        # 加密密码后再存储
         if self.remember_password.isChecked():
             email_settings["email_password"] = encrypt_password(self.email_password.text())
             email_settings["remember_password"] = True
@@ -648,31 +619,45 @@ class SettingsWindow(QDialog):
         # 获取用户兴趣标签
         user_interests = self.tag_editor.get_tags()
         
-        # 更新全局设置
-        self.global_settings.update({
-            "email_settings": email_settings,
-            "ai_settings": ai_settings,
-            "user_interests": user_interests  # 添加用户兴趣标签
-        })
+        # 重要：确保在更新全局设置时不会覆盖通用设置
+        self.global_settings["general_settings"] = general_settings
+        self.global_settings["email_settings"] = email_settings
+        self.global_settings["ai_settings"] = ai_settings
+        self.global_settings["user_interests"] = user_interests
         
+        # 保存整个配置
         self.config["global_settings"] = self.global_settings
         save_config(self.config)
+        
+        # 验证设置是否保存成功
+        verification_config = load_config()
+        saved_language = verification_config.get("global_settings", {}).get("general_settings", {}).get("language")
+        print(f"[DEBUG] Verification - Current config language: {current_language}")
+        print(f"[DEBUG] Verification - Saved language: {saved_language}")
+        
+        if saved_language != current_language:
+            print("[ERROR] Language setting was not saved correctly!")
+            QMessageBox.warning(self, "Save Error", "Language setting may not have been saved correctly.")
+        else:
+            print("[DEBUG] Language setting saved successfully!")
         
         # 保存后更新比较基准
         self.original_config = self._get_serializable_config(self.config)
         self.has_unsaved_changes = False
         
-        # 特别处理：输出调试信息确认设置已保存
-        print(f"保存设置 - 跳过已处理文章: {'是' if current_skip_setting else '否'}")
-        print(f"设置变化: {prev_skip_setting} -> {current_skip_setting}")
+        # 如果语言设置发生变化，应用新语言并显示通知
+        if language_changed:
+            print(f"[DEBUG] Language changed from {prev_language} to {current_language}")
+            set_language(current_language)
+            
+            QMessageBox.information(
+                self,
+                "Language Changed / 语言已更改",
+                get_text("restart_required")
+            )
         
-        # 如果跳过已处理文章设置发生了变化，显示特殊提示
-        if prev_skip_setting != current_skip_setting:
-            self.status_label.setText("设置已保存。新的文章处理设置将在下次运行任务时生效！")
-            self.status_label.setStyleSheet("color: green; font-weight: bold;")
-        else:
-            self.status_label.setText("设置已保存！")
-            self.status_label.setStyleSheet("color: green;")
+        self.status_label.setText(get_text("settings_saved"))
+        self.status_label.setStyleSheet("color: green;")
         
         # 3秒后清除提示
         QTimer.singleShot(5000, self.clear_status)
@@ -687,8 +672,8 @@ class SettingsWindow(QDialog):
         if self.has_unsaved_changes:
             reply = QMessageBox.question(
                 self, 
-                "Unsaved Changes", 
-                "You have unsaved changes. Do you want to save before closing?",
+                get_text("unsaved_changes"), 
+                get_text("save_changes_prompt"),
                 QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel
             )
             
@@ -711,8 +696,8 @@ class SettingsWindow(QDialog):
         password = self.email_password.text()  # 直接使用输入框中的明文密码进行测试
         
         if not server or not email or not password:
-            QMessageBox.warning(self, "Incomplete Information", 
-                             "Please fill in all email settings (server, email, and password).")
+            QMessageBox.warning(self, get_text("incomplete_info"), 
+                             get_text("fill_email_settings"))
             return
         
         # Create temp config
@@ -732,13 +717,13 @@ class SettingsWindow(QDialog):
         email_sender = EmailSender(temp_config)
         
         # 显示正在发送的提示
-        QMessageBox.information(self, "Sending Test", 
-                             f"Sending test email to: {email}\nPlease wait...")
+        QMessageBox.information(self, get_text("sending_test"), 
+                             f"{get_text('sending_test_to')}: {email}\n{get_text('please_wait')}")
         
         # 发送测试邮件
         success, message = email_sender.send_test_email(email)
         
         if success:
-            QMessageBox.information(self, "Success", "Test email sent successfully!")
+            QMessageBox.information(self, get_text("success"), get_text("test_email_sent"))
         else:
-            QMessageBox.critical(self, "Failed", f"Failed to send test email.\nError: {message}")
+            QMessageBox.critical(self, get_text("failed"), f"{get_text('test_email_failed')}\n{get_text('error')}: {message}")

@@ -7,10 +7,15 @@ from gui.components.feed_manager import FeedManager
 from gui.components.recipient_manager import RecipientManager
 from gui.components.scheduler_manager import SchedulerManager
 from core.config_manager import save_task
+from core.localization import initialize as init_localization, get_text
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        
+        # Initialize localization
+        init_localization()
+        
         self.setWindowTitle("NewsDigest")
         self.setMinimumSize(800, 500)
         
@@ -35,24 +40,24 @@ class MainWindow(QMainWindow):
         
         # Tab 1: RSS Feeds - using FeedManager
         self.feed_manager = FeedManager()
-        self.tabs.addTab(self.feed_manager, "RSS Feeds")
+        self.tabs.addTab(self.feed_manager, get_text("rss_feeds"))
         
         # Tab 2: Scheduling - using SchedulerManager
         self.scheduler_manager = SchedulerManager()
         self.scheduler_manager.schedule_updated.connect(self.reload_tasks)
-        self.tabs.addTab(self.scheduler_manager, "Schedule")
+        self.tabs.addTab(self.scheduler_manager, get_text("schedule"))
         
         # Tab 3: Recipients - using RecipientManager
         self.recipient_manager = RecipientManager()
-        self.tabs.addTab(self.recipient_manager, "Recipients")
+        self.tabs.addTab(self.recipient_manager, get_text("recipients"))
         
         main_layout.addWidget(self.tabs)
         
         # Action buttons section
         buttons_layout = QHBoxLayout()
         
-        self.run_now_btn = QPushButton("Run Now")
-        self.settings_btn = QPushButton("Settings")
+        self.run_now_btn = QPushButton(get_text("run_now"))
+        self.settings_btn = QPushButton(get_text("settings"))
         
         self.run_now_btn.clicked.connect(self.run_task_now)
         self.settings_btn.clicked.connect(self.open_settings)
@@ -86,21 +91,20 @@ class MainWindow(QMainWindow):
         """Execute the RSS fetching and processing task immediately"""
         task = self.task_manager.get_current_task()
         if not task:
-            QMessageBox.warning(self, "No Task", "No task selected or available.")
+            QMessageBox.warning(self, get_text("no_task"), get_text("no_task_selected"))
             return
         
         # 更新按钮状态，防止重复点击
         self.run_now_btn.setEnabled(False)
-        self.run_now_btn.setText("Running...")
+        self.run_now_btn.setText(get_text("running"))
         
         # 首先保存最新的任务状态到配置文件
         save_task(task)
         
         # 向用户显示任务已经开始的提示
-        QMessageBox.information(self, "Task Started", 
-                              f"The task '{task.name}' has started in background.\n\n"
-                              f"This may take some time, especially if using AI filtering.\n"
-                              f"You can continue using the application while the task runs.")
+        QMessageBox.information(self, get_text("task_started"), 
+                              f"{get_text('task_started_message')} '{task.name}'\n\n"
+                              f"{get_text('task_started_note')}")
         
         try:
             # 记录任务ID用于调试
@@ -122,12 +126,12 @@ class MainWindow(QMainWindow):
             import traceback
             error_details = traceback.format_exc()
             print(f"任务执行错误: {error_details}")
-            QMessageBox.critical(self, "Task Error", 
-                               f"Error starting task: {str(e)}")
+            QMessageBox.critical(self, get_text("task_error"), 
+                               f"{get_text('error_starting_task')}: {str(e)}")
         finally:
             # 恢复按钮状态
             self.run_now_btn.setEnabled(True)
-            self.run_now_btn.setText("Run Now")
+            self.run_now_btn.setText(get_text("run_now"))
     
     def reload_tasks(self):
         """重新加载任务调度，响应调度更新信号"""
@@ -136,9 +140,9 @@ class MainWindow(QMainWindow):
             status = reload_scheduled_tasks()
             # 显示确认消息
             job_count = status.get('active_jobs', 0)
-            QMessageBox.information(self, "Schedule Updated", 
-                                  f"The schedule has been updated.\n\n"
-                                  f"{job_count} task(s) have been scheduled.")
+            QMessageBox.information(self, get_text("schedule_updated"), 
+                                  f"{get_text('schedule_updated_message')}\n\n"
+                                  f"{job_count} {get_text('tasks_scheduled')}")
             
             # 刷新调度管理器的显示
             self.scheduler_manager.update_next_run_display()
@@ -146,8 +150,8 @@ class MainWindow(QMainWindow):
             import traceback
             error_details = traceback.format_exc()
             print(f"重新加载任务出错: {error_details}")
-            QMessageBox.critical(self, "Schedule Error", 
-                              f"Error reloading tasks: {str(e)}")
+            QMessageBox.critical(self, get_text("schedule_error"), 
+                              f"{get_text('error_reloading_tasks')}: {str(e)}")
     
     def open_settings(self):
         """Open the settings window"""
@@ -159,5 +163,5 @@ class MainWindow(QMainWindow):
             import traceback
             error_details = traceback.format_exc()
             print(f"打开设置窗口错误: {error_details}")
-            QMessageBox.critical(self, "Settings Error", 
-                               f"Error opening settings: {str(e)}")
+            QMessageBox.critical(self, get_text("settings_error"), 
+                               f"{get_text('error_opening_settings')}: {str(e)}")
