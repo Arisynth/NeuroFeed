@@ -6,6 +6,7 @@ from email.mime.text import MIMEText
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 from core.encryption import decrypt_password
+from core.localization import get_text, get_current_language
 
 # 配置日志
 logger = logging.getLogger("email_sender")
@@ -43,6 +44,9 @@ class EmailSender:
         # 验证必要的设置是否存在
         if not all([self.smtp_server, self.sender_email, self.email_password]):
             logger.warning("邮件设置不完整，需要在设置中配置SMTP服务器、发件人和密码")
+        
+        # 获取当前语言设置
+        self.language = get_current_language()
     
     def send_digest(self, task_name: str, contents: List[Dict[str, Any]], 
                     recipients: List[str]) -> Dict[str, Dict[str, Any]]:
@@ -251,15 +255,15 @@ class EmailSender:
         <body>
             <div class="header">
                 <h1>NewsDigest - {task_name}</h1>
-                <p>{date_str} 新闻简报</p>
+                <p>{date_str} {get_text("digest_subtitle")}</p>
             </div>
             <div class="news-section">
         """
         
         # 添加排序后的所有新闻
         for content in sorted_contents:
-            title = content.get("title", "无标题")
-            news_brief = content.get("news_brief", "无内容")
+            title = content.get("title", get_text("no_title"))
+            news_brief = content.get("news_brief", get_text("no_content"))
             # 将Markdown转换为HTML，而不是完全移除
             news_brief = self._convert_markdown_to_html(news_brief)
             
@@ -268,9 +272,9 @@ class EmailSender:
             if link.startswith("https://weibo.com/"):
                 link = self._fix_weibo_link(link)
                 
-            source = content.get("source", "未知来源")
+            source = content.get("source", get_text("unknown_source"))
             
-            # 获取并格式化发布时间
+            # 使用语言设置来格式化日期
             pub_date_html = ""
             pub_date = content.get("published", "")
             if pub_date:
@@ -278,11 +282,11 @@ class EmailSender:
                     # 尝试解析ISO格式日期
                     from datetime import datetime
                     date_obj = datetime.fromisoformat(pub_date)
-                    formatted_date = date_obj.strftime("%Y年%m月%d日 %H:%M")
-                    pub_date_html = f'<span class="pubdate">发布时间: {formatted_date}</span>'
+                    formatted_date = date_obj.strftime("%Y年%m月%d日 %H:%M") if self.language == "zh" else date_obj.strftime("%Y-%m-%d %H:%M")
+                    pub_date_html = f'<span class="pubdate">{get_text("publish_time")}: {formatted_date}</span>'
                 except (ValueError, TypeError):
                     # 如果解析失败，直接使用原始字符串
-                    pub_date_html = f'<span class="pubdate">发布时间: {pub_date}</span>'
+                    pub_date_html = f'<span class="pubdate">{get_text("publish_time")}: {pub_date}</span>'
             
             # 获取评估数据，用于显示重要性等级
             evaluation = content.get("evaluation", {})
@@ -326,12 +330,12 @@ class EmailSender:
             <div class="news-item">
                 <h3>{title} {categories_html}</h3>
                 <div class="meta">
-                    <span class="source">来源: {source}</span>
+                    <span class="source">{get_text("source")}: {source}</span>
                     {pub_date_html}
                     {importance_stars}
                 </div>
                 <div class="content">{news_brief}</div>
-                <a href="{link}" class="link" target="_blank">阅读原文</a>
+                <a href="{link}" class="link" target="_blank">{get_text("read_original")}</a>
             </div>
             """
         
@@ -339,7 +343,9 @@ class EmailSender:
         html += f"""
             </div>
             <div class="footer">
-                <p>此邮件由NewsDigest自动生成 - {date_str}</p>
+                <p style="white-space: pre-line; color: #666; font-size: 11px; line-height: 1.4;">
+                    {get_text("digest_footer")} - {date_str}
+                </p>
             </div>
         </body>
         </html>
@@ -534,7 +540,7 @@ class EmailSender:
     def send_test_email(self, recipient: str) -> Tuple[bool, str]:
         """发送测试邮件"""
         if not all([self.smtp_server, self.sender_email, self.email_password]):
-            return False, "邮件设置不完整，无法发送。请检查SMTP服务器、发件人和密码。"
+            return False, get_text("email_settings_incomplete")
         
         try:
             # 连接SMTP服务器
@@ -544,28 +550,28 @@ class EmailSender:
             msg = MIMEMultipart()
             msg['From'] = self.sender_email
             msg['To'] = recipient
-            msg['Subject'] = "NewsDigest - 测试邮件"
+            msg['Subject'] = get_text("email_test_subject")
             
             # 测试邮件内容
-            html = """
+            html = f"""
             <!DOCTYPE html>
             <html>
             <head>
                 <style>
-                    body { font-family: Arial, sans-serif; line-height: 1.6; }
-                    .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; }
-                    .header { background-color: #2c3e50; color: white; padding: 10px; text-align: center; }
-                    .content { padding: 20px; }
+                    body {{ font-family: Arial, sans-serif; line-height: 1.6; }}
+                    .container {{ max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; }}
+                    .header {{ background-color: #2c3e50; color: white; padding: 10px; text-align: center; }}
+                    .content {{ padding: 20px; }}
                 </style>
             </head>
             <body>
                 <div class="container">
                     <div class="header">
-                        <h2>NewsDigest 测试邮件</h2>
+                        <h2>{get_text("email_test_header")}</h2>
                     </div>
                     <div class="content">
-                        <p>这是一封测试邮件，用于验证您的邮件配置是否正确。</p>
-                        <p>如果您收到这封邮件，说明您的邮件服务配置成功！</p>
+                        <p>{get_text("email_test_content1")}</p>
+                        <p>{get_text("email_test_content2")}</p>
                     </div>
                 </div>
             </body>
@@ -580,9 +586,9 @@ class EmailSender:
             # 关闭连接
             smtp.quit()
             
-            return True, "测试邮件发送成功"
+            return True, get_text("email_test_success")
             
         except Exception as e:
-            error_msg = f"发送测试邮件失败: {str(e)}"
+            error_msg = f'{get_text("email_test_failed")}: {str(e)}'
             logger.error(error_msg)
             return False, error_msg

@@ -29,6 +29,10 @@ class NewsSummarizer:
         
         # 简报风格设置
         self.brief_style = self.summarize_settings.get("style", "informative")
+        
+        # 语言设置，从general_settings中获取，默认为中文
+        general_settings = global_settings.get("general_settings", {})
+        self.language = general_settings.get("language", "zh")
     
     def generate_summaries(self, contents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """为一组新闻内容生成简报概要
@@ -143,6 +147,10 @@ class NewsSummarizer:
 
 请直接输出简化后的标题，不要添加任何解释或前缀。"""
 
+            # 如果需要输出英文标题
+            if self.language == "en":
+                prompt += "\n请用英文输出简化后的标题。"
+
             # 调用AI
             response = self.ai_service.call_ai(prompt, max_retries=2)
             
@@ -164,6 +172,33 @@ class NewsSummarizer:
             # 如果AI简化失败，使用简单截断
             return title[:67] + "..."
     
+    def _is_language_match(self, text: str, target_language: str) -> bool:
+        """检测文本是否主要使用指定的语言
+        
+        Args:
+            text: 要检查的文本
+            target_language: 目标语言 ("zh" 或 "en")
+            
+        Returns:
+            如果文本主要使用目标语言返回True，否则返回False
+        """
+        if not text:
+            return False
+        
+        if target_language == "zh":
+            # 检测中文字符的正则表达式
+            pattern = re.compile(r'[\u4e00-\u9fff]')
+            # 如果中文字符占比超过1%，认为是中文
+            return len(pattern.findall(text)) / len(text) > 0.01
+        elif target_language == "en":
+            # 检测英文单词的正则表达式
+            pattern = re.compile(r'[a-zA-Z]')
+            # 如果英文字符占比超过30%，认为是英文
+            return len(pattern.findall(text)) / len(text) > 0.3
+        
+        # 默认返回False
+        return False
+    
     def _is_chinese_title(self, text: str) -> bool:
         """检测标题是否已经主要是中文
         
@@ -173,18 +208,8 @@ class NewsSummarizer:
         Returns:
             如果文本主要是中文返回True，否则返回False
         """
-        # 检测中文字符的正则表达式
-        chinese_pattern = re.compile(r'[\u4e00-\u9fff]')
-        
-        # 如果文本为空，返回False
-        if not text:
-            return False
-        
-        # 计算中文字符的数量
-        chinese_chars = chinese_pattern.findall(text)
-        
-        # 如果中文字符占比超过1%，认为是中文标题
-        return len(chinese_chars) / len(text) > 0.01
+        # 复用语言匹配检测功能
+        return self._is_language_match(text, "zh")
     
     def _generate_ai_summary(self, content: Dict[str, Any]) -> str:
         """使用AI生成新闻简报
@@ -210,16 +235,27 @@ class NewsSummarizer:
         # 处理AI响应
         brief = response.strip()
         
-        # 只有当原标题不是中文时才尝试提取翻译的标题
+        # 判断标题是否需要翻译(不匹配目标语言)
         original_title = content.get("title", "")
-        if not self._is_chinese_title(original_title):
-            # 检查响应是否包含标题格式（如 "标题：翻译的标题" 或 "# 翻译的标题"）
-            title_patterns = [
-                r"(?:标题[：:]\s*)(.+?)(?:\n|$)",   # 标题：翻译的标题
-                r"(?:^|\n)#\s+(.+?)(?:\n|$)",      # # 翻译的标题
-                r"(?:^|\n)【(.+?)】(?:\n|$)",      # 【翻译的标题】
-                r"(?:^|\n)「(.+?)」(?:\n|$)"       # 「翻译的标题」
-            ]
+        title_matches_language = self._is_language_match(original_title, self.language)
+        
+        if not title_matches_language:
+            # 从AI回复中提取翻译标题的正则表达式模式
+            title_patterns = []
+            
+            if self.language == "zh":
+                title_patterns = [
+                    r"(?:标题[：:]\s*)(.+?)(?:\n|$)",   # 标题：翻译的标题
+                    r"(?:^|\n)#\s+(.+?)(?:\n|$)",      # # 翻译的标题
+                    r"(?:^|\n)【(.+?)】(?:\n|$)",      # 【翻译的标题】
+                    r"(?:^|\n)「(.+?)」(?:\n|$)"       # 「翻译的标题」
+                ]
+            elif self.language == "en":
+                title_patterns = [
+                    r"(?:Title[：:]\s*)(.+?)(?:\n|$)",  # Title: Translated title
+                    r"(?:^|\n)#\s+(.+?)(?:\n|$)",      # # Translated title
+                    r"(?:^|\n)\*\*(.+?)\*\*(?:\n|$)"   # **Translated title**
+                ]
             
             for pattern in title_patterns:
                 match = re.search(pattern, brief)
@@ -258,8 +294,8 @@ class NewsSummarizer:
         if len(content) > 6000:
             content = content[:6000] + "..."
         
-        # 检测标题是否已经是中文
-        is_chinese = self._is_chinese_title(title)
+        # 检测标题是否与目标语言匹配
+        title_matches_language = self._is_language_match(title, self.language)
         
         # 根据简报风格调整提示词
         style_description = ""
@@ -269,10 +305,14 @@ class NewsSummarizer:
             style_description = "简明扼要的"
         elif self.brief_style == "conversational":
             style_description = "通俗易懂的"
-            
-        return f"""请为以下新闻内容提供一个{style_description}中文摘要。摘要应帮助读者快速理解文章的主要内容，以便决定是否阅读原文。
+        
+        # 确定输出语言
+        output_language = "中文" if self.language == "zh" else "英文"
+        
+        # 构建基本提示词
+        prompt = f"""请为以下新闻内容提供一个{output_language}{style_description}摘要。无论原文是什么语言，摘要语言必须为{output_language}。摘要应帮助读者快速理解文章的主要内容，以便决定是否阅读原文。
 
-{'如果原标题不是中文，请将标题翻译成中文，并以"标题：翻译后的标题"格式置于摘要之前。' if not is_chinese else '文章标题已经是中文，无需翻译。'}
+{'如果原标题与输出语言不匹配，请将标题翻译成' + output_language + '，并以"标题：翻译后的标题"格式置于摘要之前。' if not title_matches_language else '文章标题已经与输出语言匹配，无需翻译。'}
 
 请遵循以下要求：
 1. 摘要应包含文章的核心信息和要点，保持完整性和可读性
@@ -281,12 +321,15 @@ class NewsSummarizer:
 4. 不要使用"新闻简报"、"摘要"、"总结"等词作为开头
 5. 不要包含"简报结束"、"以上就是..."等作为结尾
 6. 不要包含当前日期、来源信息、参考链接等元数据
-7. 直接输出摘要内容，不要添加额外的解释或说明
+7. 直接输出{output_language}摘要内容，不要添加额外的解释或说明
+8. 请严格遵守以上要求，确保生成的摘要符合预期
 
 标题：{title}
 
 内容：
 {content}
 
-{'请先提供翻译后的中文标题（格式为"标题：翻译标题"），然后空一行再给出摘要。' if not is_chinese else '请直接提供摘要内容。'}
+{'请先提供翻译后的' + output_language + '标题（格式为"标题：翻译标题"），然后空一行再给出摘要。' if not title_matches_language else '请直接提供' + output_language + '摘要内容。'}
 """
+
+        return prompt

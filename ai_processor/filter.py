@@ -170,7 +170,7 @@ class ContentFilter:
 请按以下JSON格式返回评估结果：
 {{ "interest_match": {{ "is_match": true/false, "matched_tags": ["标签1", "标签2"], "explanation": "解释为什么匹配或不匹配" }}, "importance": {{ "rating": "极低/低/中/高/极高", "explanation": "解释为什么给出这个评级" }}, "timeliness": {{ "rating": "极低/低/中/高/极高", "explanation": "解释为什么给出这个评级" }}, "interest_level": {{ "rating": "极低/低/中/高/极高", "explanation": "解释为什么给出这个评级" }} }}
 
-请只返回JSON格式的评估结果，不要有任何其他文本。
+请只返回JSON格式的评估结果，严格遵守要求中定义的JSON格式，不要有任何其他文本。
 """
     
     def _parse_evaluation(self, evaluation_text: str) -> Dict[str, Any]:

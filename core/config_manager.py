@@ -47,7 +47,8 @@ def initialize_config():
                         "start_on_boot": True,
                         "minimize_to_tray": True,
                         "show_notifications": True,
-                        "skip_processed_articles": True
+                        "skip_processed_articles": True,
+                        "language": "en"
                     },
                     "user_interests": []
                 }
