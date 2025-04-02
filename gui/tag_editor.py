@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
                             QCompleter, QFrame, QLayout)
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QRect, QPoint
 from PyQt6.QtGui import QColor
+from core.localization import get_text  # 添加本地化导入
 
 # Custom FlowLayout for tag wrapping
 class QFlowLayout(QLayout):
@@ -162,10 +163,16 @@ class TagEditor(QWidget):
     def __init__(self, parent=None, rows=3):
         super().__init__(parent)
         
-        # Common tags suggestions (translated to English)
-        self.common_tags = ["News", "Politics", "Finance", "Sports", "Technology", 
-                          "Entertainment", "Education", "Health", "Culture", "Travel", 
-                          "Automotive", "Real Estate", "Electronics", "Fashion"]
+        # 将标签建议翻译为当前语言
+        self.common_tags = [
+            get_text("tag_news"), get_text("tag_politics"), 
+            get_text("tag_finance"), get_text("tag_sports"),
+            get_text("tag_technology"), get_text("tag_entertainment"),
+            get_text("tag_education"), get_text("tag_health"),
+            get_text("tag_culture"), get_text("tag_travel"),
+            get_text("tag_automotive"), get_text("tag_real_estate"),
+            get_text("tag_electronics"), get_text("tag_fashion")
+        ]
         
         # Current tags
         self.tags = []
@@ -177,7 +184,7 @@ class TagEditor(QWidget):
         # Input area
         input_layout = QHBoxLayout()
         self.tag_input = QLineEdit()
-        self.tag_input.setPlaceholderText("Add a tag...")
+        self.tag_input.setPlaceholderText(get_text("add_tag_placeholder"))
         self.tag_input.returnPressed.connect(self.add_current_tag)
         
         # Add autocomplete for common tags
@@ -185,7 +192,7 @@ class TagEditor(QWidget):
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self.tag_input.setCompleter(completer)
         
-        add_btn = QPushButton("Add")
+        add_btn = QPushButton(get_text("add"))
         add_btn.clicked.connect(self.add_current_tag)
         
         input_layout.addWidget(self.tag_input)

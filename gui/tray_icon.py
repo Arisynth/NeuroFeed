@@ -5,6 +5,7 @@ def TrayIcon(main_window):
     from PyQt6.QtWidgets import QSystemTrayIcon, QMenu, QAction
     from PyQt6.QtGui import QIcon
     from PyQt6.QtCore import Qt
+    from core.localization import get_text  # 添加本地化导入
 
     class TrayIcon(QSystemTrayIcon):
         def __init__(self, main_window):
@@ -15,8 +16,8 @@ def TrayIcon(main_window):
 
             # 创建右键菜单
             self.menu = QMenu()
-            self.show_action = QAction("显示主窗口")
-            self.exit_action = QAction("退出")
+            self.show_action = QAction(get_text("show_window"))
+            self.exit_action = QAction(get_text("exit"))
 
             # 连接信号
             self.show_action.triggered.connect(self.show_main_window)

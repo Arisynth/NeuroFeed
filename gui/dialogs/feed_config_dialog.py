@@ -2,12 +2,13 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                             QLabel, QLineEdit, QSpinBox, QDialogButtonBox)
 from PyQt6.QtCore import Qt
 from gui.tag_editor import TagEditor
+from core.localization import get_text
 
 class FeedConfigDialog(QDialog):
     """Dialog to configure RSS feed settings"""
     def __init__(self, parent=None, feed_url="", items_count=10, labels=None):
         super().__init__(parent)
-        self.setWindowTitle("RSS Feed Configuration")
+        self.setWindowTitle(get_text("rss_feed_config"))
         self.resize(550, 280)  # 稍微减小窗口宽度
         
         layout = QVBoxLayout(self)
@@ -24,13 +25,13 @@ class FeedConfigDialog(QDialog):
         self.count_input.setRange(1, 100)
         self.count_input.setValue(items_count)
         self.count_input.setFixedWidth(80)
-        self.count_input.setSuffix(" items")
+        self.count_input.setSuffix(get_text("items"))
         
-        form_layout.addRow("RSS Feed URL:", self.url_input)
-        form_layout.addRow("Number of news items to fetch:", self.count_input)
+        form_layout.addRow(get_text("rss_feed_url"), self.url_input)
+        form_layout.addRow(get_text("items_to_fetch"), self.count_input)
         
         # 标签区域标题，移除加粗
-        labels_label = QLabel("Interest Tags:")
+        labels_label = QLabel(get_text("interest_tags"))
         
         # 使用2行高的标签编辑器
         self.tag_editor = TagEditor(rows=2)

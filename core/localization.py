@@ -96,6 +96,7 @@ _translations = {
         
         # Settings Window
         "email": "Email",
+        "ai": "AI",
         "smtp_server_settings": "SMTP Server Settings",
         "authentication_settings": "Authentication Settings",
         "ollama_settings": "Ollama Settings",
@@ -118,6 +119,75 @@ _translations = {
         "failed": "Failed",
         "test_email_failed": "Failed to send test email.",
         "settings_effect_next_run": "New article processing settings will take effect on the next task run!",
+        
+        # Tag editor translations
+        "add_tag_placeholder": "Add a tag...",
+        "add": "Add",
+        
+        # Common tags
+        "tag_news": "News",
+        "tag_politics": "Politics",
+        "tag_finance": "Finance",
+        "tag_sports": "Sports",
+        "tag_technology": "Technology",
+        "tag_entertainment": "Entertainment",
+        "tag_education": "Education",
+        "tag_health": "Health",
+        "tag_culture": "Culture",
+        "tag_travel": "Travel",
+        "tag_automotive": "Automotive",
+        "tag_real_estate": "Real Estate",
+        "tag_electronics": "Electronics",
+        "tag_fashion": "Fashion",
+        
+        # Tray icon translations
+        "show_window": "Show Window",
+        "exit": "Exit",
+        
+        # Feed management
+        "rss_feed_config": "RSS Feed Configuration",
+        "rss_feed_url": "RSS Feed URL:",
+        "items_to_fetch": "Number of news items to fetch:",
+        "items": " items",  # Retain this one, remove the duplicate
+        "rss_feeds_for_task": "RSS Feeds for this Task:",
+        "feed_url": "Feed URL",
+        "labels": "Labels",
+        "status": "Status",
+        "last_fetch_time": "Last Fetch Time",
+        "move_feed_up": "Move feed up",
+        "move_feed_down": "Move feed down",
+        "add_feed": "Add Feed",
+        "edit_feed": "Edit Feed",
+        "remove_feed": "Remove Feed",
+        "test_feed": "Test Feed",
+        "never": "Never",
+        "feed_test_success": "Successfully fetched feed: {}",
+        "feed_test_failed": "Failed to fetch feed: {}",
+        
+        # Task management
+        "add_task": "Add Task",
+        "edit_task": "Edit Task",
+        "remove_task": "Remove Task",
+        "new_task": "New Task",
+        "enter_task_name": "Enter task name:",
+        "enter_new_task_name": "Enter new task name:",
+        "task_name_exists": "A task with this name already exists.",
+        "confirm_delete": "Confirm Delete",
+        "confirm_delete_task": "Are you sure you want to delete task '{}'?",
+        "duplicate_task": "Duplicate Task",
+        "enter_duplicate_task_name": "Enter name for the duplicate task:",
+        "copy": "Copy",
+        "cannot_delete": "Cannot Delete",
+        "cannot_delete_only_task": "Cannot delete the only task. At least one task must remain.",
+        "select_task": "Select Task:",
+        "task_duplicated": "Task Duplicated",
+        "task_duplicated_message": "Task has been duplicated as '{}'",
+        "loaded_tasks": "Loaded {} tasks",
+        "selected_first_task": "Selected first task: {}",
+        "no_tasks_found": "No tasks found, creating default task",
+        "error_loading_tasks": "Error loading tasks: {}",
+        "error_updating_task_list": "Error updating task list: {}",
+        "default_task": "Default Task",
     },
     
     # Chinese translations
@@ -207,6 +277,7 @@ _translations = {
         
         # Settings Window
         "email": "邮箱",
+        "ai": "AI",
         "smtp_server_settings": "SMTP服务器设置",
         "authentication_settings": "认证设置",
         "ollama_settings": "Ollama设置",
@@ -229,6 +300,75 @@ _translations = {
         "failed": "失败",
         "test_email_failed": "发送测试邮件失败。",
         "settings_effect_next_run": "新的文章处理设置将在下次运行任务时生效！",
+        
+        # Tag editor translations
+        "add_tag_placeholder": "添加标签...",
+        "add": "添加",
+        
+        # Common tags
+        "tag_news": "新闻",
+        "tag_politics": "政治",
+        "tag_finance": "财经",
+        "tag_sports": "体育",
+        "tag_technology": "科技",
+        "tag_entertainment": "娱乐",
+        "tag_education": "教育",
+        "tag_health": "健康",
+        "tag_culture": "文化",
+        "tag_travel": "旅游",
+        "tag_automotive": "汽车",
+        "tag_real_estate": "房地产",
+        "tag_electronics": "电子",
+        "tag_fashion": "时尚",
+        
+        # Tray icon translations
+        "show_window": "显示窗口",
+        "exit": "退出",
+        
+        # Feed management
+        "rss_feed_config": "RSS源配置",
+        "rss_feed_url": "RSS源地址：",
+        "items_to_fetch": "获取新闻条数：",
+        "items": " 条",  # Retain this one, remove the duplicate
+        "rss_feeds_for_task": "任务的RSS源：",
+        "feed_url": "源地址",
+        "labels": "标签",
+        "status": "状态",
+        "last_fetch_time": "最后获取时间",
+        "move_feed_up": "上移源",
+        "move_feed_down": "下移源",
+        "add_feed": "添加源",
+        "edit_feed": "编辑源",
+        "remove_feed": "删除源",
+        "test_feed": "测试源",
+        "never": "从未",
+        "feed_test_success": "成功获取源：{}",
+        "feed_test_failed": "获取源失败：{}",
+        
+        # Task management
+        "add_task": "添加任务",
+        "edit_task": "编辑任务",
+        "remove_task": "删除任务",
+        "new_task": "新建任务",
+        "enter_task_name": "输入任务名称：",
+        "enter_new_task_name": "输入新的任务名称：",
+        "task_name_exists": "已存在同名任务。",
+        "confirm_delete": "确认删除",
+        "confirm_delete_task": "确定要删除任务'{}'吗？",
+        "duplicate_task": "复制任务",
+        "enter_duplicate_task_name": "输入复制任务的名称：",
+        "copy": "副本",
+        "cannot_delete": "无法删除",
+        "cannot_delete_only_task": "无法删除唯一的任务。必须保留至少一个任务。",
+        "select_task": "选择任务：",
+        "task_duplicated": "任务已复制",
+        "task_duplicated_message": "任务已复制为'{}'",
+        "loaded_tasks": "已加载 {} 个任务",
+        "selected_first_task": "已选择第一个任务：{}",
+        "no_tasks_found": "未找到任务，创建默认任务",
+        "error_loading_tasks": "加载任务出错：{}",
+        "error_updating_task_list": "更新任务列表出错：{}",
+        "default_task": "默认任务",
     }
 }
 

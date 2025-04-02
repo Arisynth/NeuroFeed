@@ -5,6 +5,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QIcon
 from gui.dialogs.feed_config_dialog import FeedConfigDialog
 from datetime import datetime
+from core.localization import get_text
 
 class FeedManager(QWidget):
     """Manages RSS feeds for a task"""
@@ -21,7 +22,7 @@ class FeedManager(QWidget):
         layout = QVBoxLayout(self)
         
         # Feed section header
-        feed_section_label = QLabel("RSS Feeds for this Task:")
+        feed_section_label = QLabel(get_text("rss_feeds_for_task"))
         feed_section_label.setStyleSheet("font-weight: bold;")
         layout.addWidget(feed_section_label)
         
@@ -30,7 +31,13 @@ class FeedManager(QWidget):
         
         # Feed table
         self.feed_table = QTableWidget(0, 5)  # URL, Items Count, Labels, Status, Last Fetch Time
-        self.feed_table.setHorizontalHeaderLabels(["Feed URL", "Items", "Labels", "Status", "Last Fetch Time"])
+        self.feed_table.setHorizontalHeaderLabels([
+            get_text("feed_url"),
+            get_text("items"),
+            get_text("labels"),
+            get_text("status"),
+            get_text("last_fetch_time")
+        ])
         self.feed_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.feed_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.feed_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
@@ -44,13 +51,13 @@ class FeedManager(QWidget):
         
         # Move up button
         self.move_up_btn = QPushButton("▲")
-        self.move_up_btn.setToolTip("Move feed up")
+        self.move_up_btn.setToolTip(get_text("move_feed_up"))
         self.move_up_btn.clicked.connect(self.move_feed_up)
         order_buttons.addWidget(self.move_up_btn)
         
         # Move down button
         self.move_down_btn = QPushButton("▼")
-        self.move_down_btn.setToolTip("Move feed down")
+        self.move_down_btn.setToolTip(get_text("move_feed_down"))
         self.move_down_btn.clicked.connect(self.move_feed_down)
         order_buttons.addWidget(self.move_down_btn)
         
@@ -65,10 +72,10 @@ class FeedManager(QWidget):
         
         # Feed controls
         controls_layout = QHBoxLayout()
-        self.add_feed_btn = QPushButton("Add Feed")
-        self.edit_feed_btn = QPushButton("Edit Feed")
-        self.remove_feed_btn = QPushButton("Remove Feed")
-        self.test_feed_btn = QPushButton("Test Feed")
+        self.add_feed_btn = QPushButton(get_text("add_feed"))
+        self.edit_feed_btn = QPushButton(get_text("edit_feed"))
+        self.remove_feed_btn = QPushButton(get_text("remove_feed"))
+        self.test_feed_btn = QPushButton(get_text("test_feed"))
         
         self.add_feed_btn.clicked.connect(self.add_feed)
         self.edit_feed_btn.clicked.connect(self.edit_feed)
@@ -146,8 +153,8 @@ class FeedManager(QWidget):
                 self.feed_table.setItem(row, 3, status_item)
                 
                 # Last fetch time
-                last_fetch = status_info.get("last_fetch", "Never")
-                if last_fetch != "Never":
+                last_fetch = status_info.get("last_fetch", get_text("never"))
+                if last_fetch != get_text("never"):
                     try:
                         fetch_datetime = datetime.fromisoformat(last_fetch)
                         last_fetch = fetch_datetime.strftime("%Y-%m-%d %H:%M:%S")
@@ -258,9 +265,11 @@ class FeedManager(QWidget):
             self.update_feed_table()
             
             if status == "success":
-                QMessageBox.information(self, "Feed Test", f"Successfully fetched feed: {feed_url}")
+                QMessageBox.information(self, get_text("feed_test"), 
+                    get_text("feed_test_success").format(feed_url))
             else:
-                QMessageBox.warning(self, "Feed Test", f"Failed to fetch feed: {feed_url}")
+                QMessageBox.warning(self, get_text("feed_test"), 
+                    get_text("feed_test_failed").format(feed_url))
     
     def move_feed_up(self):
         """Move the selected feed up in the list"""

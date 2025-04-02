@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QComboBox,
 from PyQt6.QtCore import Qt, pyqtSignal
 from core.config_manager import get_tasks, save_task, delete_task
 from core.task_model import Task
+from core.localization import get_text, get_formatted
 
 class TaskManager(QWidget):
     """Manages tasks selection and basic operations"""
@@ -22,17 +23,17 @@ class TaskManager(QWidget):
         
         # Task selection section
         task_selection_layout = QHBoxLayout()
-        task_selection_layout.addWidget(QLabel("Select Task:"))
+        task_selection_layout.addWidget(QLabel(get_text("select_task")))
         
         self.task_selector = QComboBox()
         self.task_selector.currentIndexChanged.connect(self.on_task_changed)
         # Reduce width of task selector to make room for buttons
         task_selection_layout.addWidget(self.task_selector, 1)
         
-        self.add_task_btn = QPushButton("Add Task")
-        self.edit_task_btn = QPushButton("Edit Task")
-        self.duplicate_task_btn = QPushButton("Duplicate Task")
-        self.delete_task_btn = QPushButton("Delete Task")
+        self.add_task_btn = QPushButton(get_text("add_task"))
+        self.edit_task_btn = QPushButton(get_text("edit_task"))
+        self.duplicate_task_btn = QPushButton(get_text("duplicate_task"))
+        self.delete_task_btn = QPushButton(get_text("remove_task"))  # Changed from delete_task to remove_task
         
         # Set fixed width to ensure buttons have consistent size
         button_width = 100
@@ -57,29 +58,29 @@ class TaskManager(QWidget):
         """Load tasks from configuration"""
         try:
             self.tasks = get_tasks()
-            print(f"从配置加载了 {len(self.tasks)} 个任务")
+            print(get_formatted("loaded_tasks", len(self.tasks)))
             
             self.update_task_list()
             
             if self.tasks:
                 self.current_task = self.tasks[0]
-                print(f"选择了第一个任务: {self.current_task.name}")
+                print(get_formatted("selected_first_task", self.current_task.name))
                 self.task_changed.emit(self.current_task)
             else:
-                print("没有找到任务，创建默认任务")
+                print(get_text("no_tasks_found"))
                 # Create default task if none exists
-                self.current_task = Task(name="Default Task")
+                self.current_task = Task(name=get_text("default_task"))
                 save_task(self.current_task)
                 self.tasks = [self.current_task]
                 self.update_task_list()
                 self.task_changed.emit(self.current_task)
         except Exception as e:
             import traceback
-            print(f"加载任务出错: {str(e)}")
+            print(get_formatted("error_loading_tasks", str(e)))
             print(traceback.format_exc())
             
-            # 确保至少有一个任务可用
-            self.current_task = Task(name="Default Task")
+            # Ensure at least one task is available
+            self.current_task = Task(name=get_text("default_task"))
             self.tasks = [self.current_task]
             self.update_task_list()
             self.task_changed.emit(self.current_task)
@@ -103,14 +104,14 @@ class TaskManager(QWidget):
                         break
                 
                 if not found and self.tasks:
-                    # 如果找不到当前任务但有其他任务，选择第一个
+                    # If current task is not found but there are other tasks, select the first one
                     self.current_task = self.tasks[0]
                     self.task_selector.setCurrentIndex(0)
             
             self.task_selector.blockSignals(False)
         except Exception as e:
             import traceback
-            print(f"更新任务列表出错: {str(e)}")
+            print(get_text("error_updating_task_list").format(str(e)))
             print(traceback.format_exc())
     
     def on_task_changed(self, index):
@@ -121,7 +122,7 @@ class TaskManager(QWidget):
     
     def add_task(self):
         """Add a new task"""
-        task_name, ok = QInputDialog.getText(self, "Add Task", "Enter task name:")
+        task_name, ok = QInputDialog.getText(self, get_text("add_task"), get_text("enter_task_name"))
         if ok and task_name:
             new_task = Task(name=task_name)
             save_task(new_task)
@@ -138,8 +139,8 @@ class TaskManager(QWidget):
         if not self.current_task:
             return
         
-        task_name, ok = QInputDialog.getText(self, "Edit Task", 
-                                           "Enter new task name:", 
+        task_name, ok = QInputDialog.getText(self, get_text("edit_task"), 
+                                           get_text("enter_new_task_name"), 
                                            text=self.current_task.name)
         if ok and task_name:
             self.current_task.name = task_name
@@ -154,12 +155,15 @@ class TaskManager(QWidget):
     def delete_task(self):
         """Delete the current task"""
         if not self.current_task or len(self.tasks) <= 1:
-            QMessageBox.warning(self, "Cannot Delete", 
-                              "Cannot delete the only task. At least one task must exist.")
+            QMessageBox.warning(
+                self, 
+                get_text("cannot_delete"),
+                get_text("cannot_delete_only_task")
+            )
             return
         
-        reply = QMessageBox.question(self, "Confirm Delete", 
-                                   f"Are you sure you want to delete task '{self.current_task.name}'?",
+        reply = QMessageBox.question(self, get_text("confirm_delete"), 
+                                   get_text("confirm_delete_task").format(self.current_task.name),
                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         
         if reply == QMessageBox.StandardButton.Yes:
@@ -181,9 +185,13 @@ class TaskManager(QWidget):
             return
         
         # Get a name for the duplicate task
-        task_name, ok = QInputDialog.getText(self, "Duplicate Task", 
-                                           "Enter name for duplicated task:", 
-                                           text=f"{self.current_task.name} (Copy)")
+        task_name, ok = QInputDialog.getText(
+            self, 
+            get_text("duplicate_task"),
+            get_text("enter_duplicate_task_name"),
+            text=f"{self.current_task.name} ({get_text('copy')})"
+        )
+        
         if ok and task_name:
             # Create a new task as a copy of the current one
             task_dict = self.current_task.to_dict()
@@ -211,5 +219,8 @@ class TaskManager(QWidget):
                     self.task_selector.setCurrentIndex(i)
                     break
             
-            QMessageBox.information(self, "Task Duplicated", 
-                                  f"Task '{task_name}' has been created as a duplicate.")
+            QMessageBox.information(
+                self, 
+                get_text("task_duplicated"),
+                get_formatted("task_duplicated_message", task_name)
+            )
