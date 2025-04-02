@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 from datetime import datetime
+from core.localization import get_text
 
 class RecipientManager(QWidget):
     """Manages email recipients for a task"""
@@ -20,13 +21,17 @@ class RecipientManager(QWidget):
         layout = QVBoxLayout(self)
         
         # Recipient section header
-        recipient_section_label = QLabel("Email Recipients:")
+        recipient_section_label = QLabel(get_text("email_recipients") + ":")
         recipient_section_label.setStyleSheet("font-weight: bold;")
         layout.addWidget(recipient_section_label)
         
         # Recipient table
         self.recipient_table = QTableWidget(0, 3)  # Email, Status, Last Sent
-        self.recipient_table.setHorizontalHeaderLabels(["Email Address", "Status", "Last Sent Time"])
+        self.recipient_table.setHorizontalHeaderLabels([
+            get_text("email_address"),
+            get_text("status"),
+            get_text("last_sent_time")
+        ])
         self.recipient_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.recipient_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.recipient_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
@@ -34,9 +39,9 @@ class RecipientManager(QWidget):
         
         # Recipient controls
         controls_layout = QHBoxLayout()
-        self.add_recipient_btn = QPushButton("Add Recipient")
-        self.remove_recipient_btn = QPushButton("Remove Recipient")
-        self.test_recipient_btn = QPushButton("Test Email")
+        self.add_recipient_btn = QPushButton(get_text("add_recipient"))
+        self.remove_recipient_btn = QPushButton(get_text("remove_recipient"))
+        self.test_recipient_btn = QPushButton(get_text("test_email"))
         
         self.add_recipient_btn.clicked.connect(self.add_recipient)
         self.remove_recipient_btn.clicked.connect(self.remove_recipient)
@@ -84,13 +89,13 @@ class RecipientManager(QWidget):
             self.recipient_table.setItem(row, 1, status_item)
             
             # Last sent time
-            last_sent = status_info.get("last_sent", "Never")
-            if last_sent != "Never":
+            last_sent = status_info.get("last_sent", get_text("never"))
+            if last_sent != get_text("never"):
                 try:
                     sent_datetime = datetime.fromisoformat(last_sent)
                     last_sent = sent_datetime.strftime("%Y-%m-%d %H:%M:%S")
                 except (ValueError, TypeError):
-                    last_sent = "Invalid format"
+                    last_sent = get_text("invalid_format")
             
             time_item = QTableWidgetItem(last_sent)
             time_item.setFlags(time_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -101,7 +106,11 @@ class RecipientManager(QWidget):
         if not self.current_task:
             return
         
-        email, ok = QInputDialog.getText(self, "Add Recipient", "Enter email address:")
+        email, ok = QInputDialog.getText(
+            self, 
+            get_text("add_recipient"),
+            get_text("enter_email_address")
+        )
         if ok and email:
             self.current_task.recipients.append(email)
             from core.config_manager import save_task
@@ -142,6 +151,14 @@ class RecipientManager(QWidget):
             self.update_recipient_table()
             
             if status == "success":
-                QMessageBox.information(self, "Email Test", f"Successfully sent test email to: {email}")
+                QMessageBox.information(
+                    self,
+                    get_text("email_test"),
+                    get_text("test_email_success").format(email)
+                )
             else:
-                QMessageBox.warning(self, "Email Test", f"Failed to send test email to: {email}")
+                QMessageBox.warning(
+                    self,
+                    get_text("email_test"),
+                    get_text("test_email_failed").format(email)
+                )
