@@ -12,6 +12,7 @@ class AiProvider(str, Enum):
     """AI提供商类型"""
     OLLAMA = "ollama"
     OPENAI = "openai"
+    SILICONFLOW = "siliconflow"  # 添加硅基流动提供商
 
 class AiException(Exception):
     """表示AI服务错误的异常"""
@@ -42,6 +43,14 @@ class AiService:
             # 检查Ollama是否可用
             if not self._check_ollama_availability():
                 raise AiException(f"Ollama在{self.ollama_host}不可用，请确保Ollama服务已启动")
+        elif self.provider == AiProvider.SILICONFLOW:
+            # 初始化硅基流动设置
+            self.siliconflow_key = self.ai_settings.get("siliconflow_key", "")
+            self.siliconflow_model = self.ai_settings.get("siliconflow_model", "Qwen/Qwen2-7B-Instruct")
+            
+            # 检查硅基流动API密钥是否可用
+            if not self.siliconflow_key:
+                raise AiException("未提供硅基流动API密钥，请在设置中添加有效的API密钥")
         else:  # OpenAI
             self.openai_key = self.ai_settings.get("openai_key", "")
             self.openai_model = self.ai_settings.get("openai_model", "gpt-3.5-turbo")
@@ -81,6 +90,8 @@ class AiService:
             try:
                 if self.provider == AiProvider.OLLAMA:
                     return self._call_ollama(prompt)
+                elif self.provider == AiProvider.SILICONFLOW:
+                    return self._call_siliconflow(prompt)
                 else:
                     return self._call_openai(prompt)
             except Exception as e:
@@ -133,6 +144,62 @@ class AiService:
                 raise Exception(error_msg)
         except Exception as e:
             logger.error(f"调用Ollama时出错: {str(e)}")
+            raise  # 重新抛出异常
+    
+    def _call_siliconflow(self, prompt: str) -> str:
+        """调用硅基流动 API获取响应
+        
+        Args:
+            prompt: 提示词
+            
+        Returns:
+            硅基流动的响应文本
+            
+        Raises:
+            Exception: 当硅基流动调用出错时
+        """
+        try:
+            logger.info(f"调用硅基流动 (模型: {self.siliconflow_model})")
+            
+            url = "https://api.siliconflow.cn/v1/chat/completions"
+            
+            headers = {
+                "Authorization": f"Bearer {self.siliconflow_key}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "model": self.siliconflow_model,
+                "messages": [
+                    {"role": "system", "content": "你是一个专业的新闻分析和处理助手。"},
+                    {"role": "user", "content": prompt}
+                ],
+                "stream": False,
+                "temperature": 0.7,
+                "max_tokens": 2048
+            }
+            
+            response = requests.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=60  # 60秒超时
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                result = data["choices"][0]["message"]["content"]
+                if not result:
+                    raise Exception("硅基流动返回了空响应")
+                    
+                logger.info(f"硅基流动响应成功，长度: {len(result)} 字符")
+                return result
+            else:
+                error_msg = f"硅基流动 API错误: {response.status_code}, {response.text}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+        except Exception as e:
+            logger.error(f"调用硅基流动时出错: {str(e)}")
             raise  # 重新抛出异常
     
     def _call_openai(self, prompt: str) -> str:

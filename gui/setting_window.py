@@ -89,6 +89,8 @@ class SettingsWindow(QDialog):
         self.ollama_model.currentIndexChanged.connect(self.mark_as_changed)
         self.openai_key.textChanged.connect(self.mark_as_changed)
         self.openai_model.currentIndexChanged.connect(self.mark_as_changed)
+        self.siliconflow_key.textChanged.connect(self.mark_as_changed)
+        self.siliconflow_model.currentIndexChanged.connect(self.mark_as_changed)
         
         # 通用设置
         self.start_on_boot.stateChanged.connect(self.mark_as_changed)
@@ -280,8 +282,16 @@ class SettingsWindow(QDialog):
         
         # Provider selection
         self.ai_provider = QComboBox()
-        self.ai_provider.addItems(["Ollama", "OpenAI"])
-        self.ai_provider.setCurrentIndex(0 if ai_provider == "ollama" else 1)
+        self.ai_provider.addItems(["Ollama", "OpenAI", "Silicon Flow"])  # 添加硅基流动选项
+        
+        # 设置当前选择的提供商
+        if ai_provider == "ollama":
+            self.ai_provider.setCurrentIndex(0)
+        elif ai_provider == "siliconflow":
+            self.ai_provider.setCurrentIndex(2)
+        else:
+            self.ai_provider.setCurrentIndex(1)  # OpenAI
+            
         self.ai_provider.currentIndexChanged.connect(self.on_ai_provider_changed)
         
         provider_layout.addWidget(self.ai_provider)
@@ -331,9 +341,50 @@ class SettingsWindow(QDialog):
         openai_form.addRow("API Key:", self.openai_key)
         openai_form.addRow("Model:", self.openai_model)
         
+        # 硅基流动设置
+        self.siliconflow_group = QGroupBox("硅基流动 (Silicon Flow) 设置")
+        siliconflow_form = QFormLayout(self.siliconflow_group)
+        
+        self.siliconflow_key = QLineEdit(ai_settings.get("siliconflow_key", ""))
+        self.siliconflow_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.siliconflow_key.setPlaceholderText("输入硅基流动API密钥")
+        
+        self.siliconflow_model = QComboBox()
+        siliconflow_models = [
+            "Qwen/QwQ-32B",
+            "Qwen/Qwen2.5-72B-Instruct", 
+            "Qwen/Qwen2.5-32B-Instruct", 
+            "Qwen/Qwen2.5-14B-Instruct", 
+            "Qwen/Qwen2.5-7B-Instruct",
+            "Qwen/Qwen2-7B-Instruct",
+            "Qwen/Qwen2-1.5B-Instruct",
+            "THUDM/glm-4-9b-chat",
+            "deepseek-ai/DeepSeek-V3",
+            "deepseek-ai/DeepSeek-R1",
+            "internlm/internlm2_5-7b-chat",
+            "internlm/internlm2_5-20b-chat"
+        ]
+        self.siliconflow_model.addItems(siliconflow_models)
+        
+        current_siliconflow_model = ai_settings.get("siliconflow_model", "Qwen/Qwen2-7B-Instruct")
+        try:
+            siliconflow_model_index = siliconflow_models.index(current_siliconflow_model)
+        except ValueError:
+            siliconflow_model_index = 5  # 默认为Qwen/Qwen2-7B-Instruct
+        self.siliconflow_model.setCurrentIndex(siliconflow_model_index)
+        
+        siliconflow_form.addRow("API Key:", self.siliconflow_key)
+        siliconflow_form.addRow("模型:", self.siliconflow_model)
+        
+        # 添加硅基流动链接
+        siliconflow_link = QLabel("<a href='https://siliconflow.cn'>访问硅基流动官网</a>")
+        siliconflow_link.setOpenExternalLinks(True)
+        siliconflow_form.addRow("", siliconflow_link)
+        
         ai_layout.addWidget(provider_group)
         ai_layout.addWidget(self.ollama_group)
         ai_layout.addWidget(self.openai_group)
+        ai_layout.addWidget(self.siliconflow_group)  # 添加硅基流动设置组
         ai_layout.addStretch()
         
         # Set initial visibility based on selected provider
@@ -392,9 +443,15 @@ class SettingsWindow(QDialog):
         if index == 0:  # Ollama
             self.ollama_group.setVisible(True)
             self.openai_group.setVisible(False)
-        else:  # OpenAI
+            self.siliconflow_group.setVisible(False)
+        elif index == 1:  # OpenAI
             self.ollama_group.setVisible(False)
             self.openai_group.setVisible(True)
+            self.siliconflow_group.setVisible(False)
+        else:  # Silicon Flow
+            self.ollama_group.setVisible(False)
+            self.openai_group.setVisible(False)
+            self.siliconflow_group.setVisible(True)
 
     def create_general_tab(self):
         """Create the general settings tab"""
@@ -548,17 +605,29 @@ class SettingsWindow(QDialog):
             email_settings["remember_password"] = False
         
         # AI settings
-        ai_provider = "ollama" if self.ai_provider.currentIndex() == 0 else "openai"
+        ai_provider_index = self.ai_provider.currentIndex()
+        if ai_provider_index == 0:
+            ai_provider = "ollama"
+        elif ai_provider_index == 1:
+            ai_provider = "openai"
+        else:
+            ai_provider = "siliconflow"
+            
         ai_settings = {
             "provider": ai_provider,
             "ollama_host": self.ollama_host.text(),
             "ollama_model": self.ollama_model.currentText(),
             "openai_model": self.openai_model.currentText(),
+            "siliconflow_model": self.siliconflow_model.currentText(),  # 添加硅基流动模型
         }
         
-        # Only save OpenAI key if it's not empty
+        # 只有当OpenAI密钥不为空时才保存
         if self.openai_key.text():
             ai_settings["openai_key"] = self.openai_key.text()
+            
+        # 只有当硅基流动密钥不为空时才保存
+        if self.siliconflow_key.text():
+            ai_settings["siliconflow_key"] = self.siliconflow_key.text()
         
         # 先获取当前设置
         current_general_settings = get_general_settings()

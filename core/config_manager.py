@@ -40,7 +40,8 @@ def initialize_config():
                         "provider": "ollama",
                         "ollama_host": "http://localhost:11434",
                         "ollama_model": "model-name",
-                        "openai_model": "gpt-3.5-turbo"
+                        "openai_model": "gpt-3.5-turbo",
+                        "siliconflow_model": "Qwen/Qwen2-7B-Instruct"
                     },
                     "general_settings": {
                         "start_on_boot": True,
@@ -68,7 +69,10 @@ def load_config():
             "tasks": [], 
             "global_settings": {
                 "email_settings": {},
-                "ai_settings": {"provider": "ollama"},
+                "ai_settings": {
+                    "provider": "ollama",
+                    "siliconflow_model": "Qwen/Qwen2-7B-Instruct"
+                },
                 "general_settings": {"minimize_to_tray": True}
             }
         }
@@ -79,7 +83,10 @@ def load_config():
             "tasks": [], 
             "global_settings": {
                 "email_settings": {},
-                "ai_settings": {"provider": "ollama"},
+                "ai_settings": {
+                    "provider": "ollama",
+                    "siliconflow_model": "Qwen/Qwen2-7B-Instruct"
+                },
                 "general_settings": {"minimize_to_tray": True}
             }
         }
