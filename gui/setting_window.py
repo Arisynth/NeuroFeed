@@ -279,12 +279,12 @@ class SettingsWindow(QDialog):
         openai_form.addRow(f"{get_text('model')}:", self.openai_model)
         
         # 硅基流动设置
-        self.siliconflow_group = QGroupBox("硅基流动 (Silicon Flow) 设置")
+        self.siliconflow_group = QGroupBox(get_text("siliconflow_settings"))
         siliconflow_form = QFormLayout(self.siliconflow_group)
         
         self.siliconflow_key = QLineEdit(ai_settings.get("siliconflow_key", ""))
         self.siliconflow_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self.siliconflow_key.setPlaceholderText("输入硅基流动API密钥")
+        self.siliconflow_key.setPlaceholderText(get_text("siliconflow_key_placeholder"))
         
         self.siliconflow_model = QComboBox()
         siliconflow_models = [
@@ -311,10 +311,10 @@ class SettingsWindow(QDialog):
         self.siliconflow_model.setCurrentIndex(siliconflow_model_index)
         
         siliconflow_form.addRow("API Key:", self.siliconflow_key)
-        siliconflow_form.addRow("模型:", self.siliconflow_model)
+        siliconflow_form.addRow(f"{get_text('model')}:", self.siliconflow_model)
         
         # 添加硅基流动链接
-        siliconflow_link = QLabel("<a href='https://siliconflow.cn'>访问硅基流动官网</a>")
+        siliconflow_link = QLabel(f"<a href='https://siliconflow.cn'>{get_text('visit_siliconflow')}</a>")
         siliconflow_link.setOpenExternalLinks(True)
         siliconflow_form.addRow("", siliconflow_link)
         
@@ -435,7 +435,7 @@ class SettingsWindow(QDialog):
         language_layout.addWidget(self.language_combo)
         language_layout.addStretch()
         
-        behavior_form.addRow(f"{get_text('language')}/语言:", language_layout)
+        behavior_form.addRow(f"{get_text('language')}:", language_layout)
         
         general_layout.addWidget(behavior_group)
         
@@ -559,7 +559,7 @@ class SettingsWindow(QDialog):
         }
         
         # 首先更新通用设置
-        update_general_settings(general_settings)
+        update_success = update_general_settings(general_settings)
         
         # Email settings
         email_settings = {
@@ -589,7 +589,7 @@ class SettingsWindow(QDialog):
             "ollama_host": self.ollama_host.text(),
             "ollama_model": self.ollama_model.currentText(),
             "openai_model": self.openai_model.currentText(),
-            "siliconflow_model": self.siliconflow_model.currentText(),  # 添加硅基流动模型
+            "siliconflow_model": self.siliconflow_model.currentText(),
         }
         
         # 只有当OpenAI密钥不为空时才保存
@@ -599,22 +599,6 @@ class SettingsWindow(QDialog):
         # 只有当硅基流动密钥不为空时才保存
         if self.siliconflow_key.text():
             ai_settings["siliconflow_key"] = self.siliconflow_key.text()
-        
-        # 先获取当前设置
-        current_general_settings = get_general_settings()
-        prev_skip_setting = current_general_settings.get("skip_processed_articles", False)
-        current_skip_setting = self.skip_processed_checkbox.isChecked()
-        
-        # General settings
-        general_settings = {
-            "start_on_boot": self.start_on_boot.isChecked(),
-            "minimize_to_tray": self.minimize_to_tray.isChecked(),
-            "show_notifications": self.show_notifications.isChecked(),
-            "skip_processed_articles": self.skip_processed_checkbox.isChecked()
-        }
-        
-        # 更新通用设置
-        update_general_settings(general_settings)
         
         # 获取用户兴趣标签
         user_interests = self.tag_editor.get_tags()
@@ -629,15 +613,61 @@ class SettingsWindow(QDialog):
         self.config["global_settings"] = self.global_settings
         save_config(self.config)
         
-        # 验证设置是否保存成功
-        verification_config = load_config()
-        saved_language = verification_config.get("global_settings", {}).get("general_settings", {}).get("language")
-        print(f"[DEBUG] Verification - Current config language: {current_language}")
-        print(f"[DEBUG] Verification - Saved language: {saved_language}")
+        # 强制等待一小段时间确保文件被完全写入
+        import time
+        time.sleep(0.5)
         
-        if saved_language != current_language:
+        # 直接从文件中读取进行验证，避免缓存问题
+        try:
+            import json
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                direct_config = json.load(f)
+                saved_language = direct_config.get("global_settings", {}).get("general_settings", {}).get("language")
+                print(f"[DEBUG] Direct file verification - Language: {saved_language}")
+        except Exception as e:
+            print(f"[DEBUG] Error reading config directly: {str(e)}")
+            saved_language = None
+        
+        # 正常验证流程
+        verification_config = load_config()
+        saved_language_from_load = verification_config.get("global_settings", {}).get("general_settings", {}).get("language")
+        print(f"[DEBUG] Verification - Current config language: {current_language}")
+        print(f"[DEBUG] Verification - Saved language (load_config): {saved_language_from_load}")
+        print(f"[DEBUG] Verification - Saved language (direct): {saved_language}")
+        
+        # 结合两种读取方式进行验证
+        if saved_language != current_language and saved_language_from_load != current_language:
             print("[ERROR] Language setting was not saved correctly!")
-            QMessageBox.warning(self, "Save Error", "Language setting may not have been saved correctly.")
+            
+            # 尝试直接修复问题
+            try:
+                if direct_config:
+                    if "global_settings" not in direct_config:
+                        direct_config["global_settings"] = {}
+                    if "general_settings" not in direct_config["global_settings"]:
+                        direct_config["global_settings"]["general_settings"] = {}
+                    
+                    direct_config["global_settings"]["general_settings"]["language"] = current_language
+                    
+                    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+                        json.dump(direct_config, f, indent=4, ensure_ascii=False)
+                    print("[DEBUG] Attempted direct fix of language setting")
+                    
+                    # 验证修复
+                    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                        fixed_config = json.load(f)
+                        fixed_language = fixed_config.get("global_settings", {}).get("general_settings", {}).get("language")
+                        print(f"[DEBUG] After fix - Language: {fixed_language}")
+                        
+                    if fixed_language == current_language:
+                        print("[DEBUG] Language setting fixed successfully!")
+                    else:
+                        QMessageBox.warning(self, "Save Error", "Language setting may not have been saved correctly.")
+                else:
+                    QMessageBox.warning(self, "Save Error", "Language setting may not have been saved correctly.")
+            except Exception as e:
+                print(f"[DEBUG] Error trying to fix language: {str(e)}")
+                QMessageBox.warning(self, "Save Error", "Language setting may not have been saved correctly.")
         else:
             print("[DEBUG] Language setting saved successfully!")
         

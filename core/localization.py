@@ -60,6 +60,11 @@ For the full article, please click the "Read Original" link.""",
         "model": "Model",
         "api_key": "API Key",
         
+        # Silicon Flow translations
+        "siliconflow_settings": "Silicon Flow Settings",
+        "siliconflow_key_placeholder": "Enter Silicon Flow API key",
+        "visit_siliconflow": "Visit Silicon Flow website",
+        
         # General settings
         "general_settings": "General Settings",
         "app_behavior": "Application Behavior",
@@ -302,6 +307,11 @@ For the full article, please click the "Read Original" link.""",
         "ai_provider": "AI提供商",
         "model": "模型",
         "api_key": "API密钥",
+        
+        # Silicon Flow translations
+        "siliconflow_settings": "硅基流动 (Silicon Flow) 设置",
+        "siliconflow_key_placeholder": "输入硅基流动API密钥",
+        "visit_siliconflow": "访问硅基流动官网",
         
         # General settings
         "general_settings": "常规设置",

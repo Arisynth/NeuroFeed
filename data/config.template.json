@@ -58,7 +58,7 @@
             "minimize_to_tray": true,
             "show_notifications": true,
             "skip_processed_articles": true,
-            "language": "en"
+            "language": "zh"
         },
         "user_interests": [
             "news",
