@@ -69,8 +69,14 @@ class EmailSender:
         sorted_contents = self._sort_contents(contents)
         
         # 创建邮件主题
-        current_date = datetime.now().strftime("%Y年%m月%d日")
-        subject = f"NewsDigest - {task_name} 新闻简报 ({current_date})"
+        # Format date according to language settings
+        if self.language == "zh":
+            current_date = datetime.now().strftime("%Y年%m月%d日")
+        else:
+            current_date = datetime.now().strftime("%Y-%m-%d")
+            
+        # Use localized text for email subject
+        subject = f"NewsDigest - {task_name} {get_text('digest_subtitle')} ({current_date})"
         
         # 创建HTML邮件内容
         html_content = self._create_html_digest(sorted_contents, task_name, current_date)
@@ -339,7 +345,7 @@ class EmailSender:
             </div>
             """
         
-        # 添加页脚
+        # 添加页脚 - Ensure the footer uses the proper date format too
         html += f"""
             </div>
             <div class="footer">

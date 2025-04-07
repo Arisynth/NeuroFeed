@@ -3,9 +3,13 @@ Localization module for multi-language support
 """
 
 from core.config_manager import get_general_settings
+import logging
 
 # Default language is English
 _current_language = "en"
+
+# Logger setup
+logger = logging.getLogger(__name__)
 
 # Translations dictionary
 _translations = {
@@ -517,14 +521,17 @@ def get_text(key):
 
 def get_current_language():
     """Get the current language code"""
+    logger.info(f"Current language requested: {_current_language}")
     return _current_language
 
 def set_language(language_code):
     """Set the current language"""
     global _current_language
     if language_code in _translations:
+        logger.info(f"Setting language from {_current_language} to {language_code}")
         _current_language = language_code
         return True
+    logger.warning(f"Attempted to set invalid language: {language_code}")
     return False
 
 # Helper function for text with parameters

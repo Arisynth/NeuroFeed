@@ -3,6 +3,7 @@ import re
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from ai_processor.ai_utils import AiService, AiException
+from core.localization import get_current_language
 
 # 配置日志
 logger = logging.getLogger("summarizer")
@@ -30,9 +31,18 @@ class NewsSummarizer:
         # 简报风格设置
         self.brief_style = self.summarize_settings.get("style", "informative")
         
-        # 语言设置，从general_settings中获取，默认为中文
+        # 直接使用core.localization中的语言设置，确保与UI一致
+        self.language = get_current_language()
+        
+        # 验证是否正确获取了语言设置
         general_settings = global_settings.get("general_settings", {})
-        self.language = general_settings.get("language", "zh")
+        config_language = general_settings.get("language", "zh")
+        
+        logger.info(f"NewsSummarizer initialized with language from localization: {self.language}")
+        logger.info(f"Language in config: {config_language}")
+        
+        if self.language != config_language:
+            logger.warning(f"Language mismatch: localization={self.language}, config={config_language}. Using {self.language}.")
     
     def generate_summaries(self, contents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """为一组新闻内容生成简报概要
@@ -226,11 +236,26 @@ class NewsSummarizer:
         title = content.get("title", "")
         article_content = content.get("content", "")
         
+        # Log the language setting being used - add more details for debugging
+        logger.info(f"Generating summary using language: {self.language} (en=English, zh=Chinese)")
+        
         # 准备AI提示词
         prompt = self._build_summary_prompt(title, article_content)
         
+        # Log more detailed info about the prompt language
+        prompt_language = "ENGLISH" if "IN ENGLISH ONLY" in prompt or "English summary" in prompt else "CHINESE"
+        logger.info(f"Created {prompt_language} prompt based on language setting: {self.language}")
+        
+        # Log the prompt being sent to the AI (first 200 chars)
+        prompt_preview = prompt[:200] + "..." if len(prompt) > 200 else prompt
+        logger.info(f"Sending prompt to AI (preview): {prompt_preview}")
+        
         # 调用AI
         response = self.ai_service.call_ai(prompt, max_retries=2)
+        
+        # Log part of the AI response to see what language it's responding in
+        response_preview = response[:200] + "..." if len(response) > 200 else response
+        logger.info(f"Received AI response (preview): {response_preview}")
         
         # 处理AI响应
         brief = response.strip()
@@ -238,6 +263,7 @@ class NewsSummarizer:
         # 判断标题是否需要翻译(不匹配目标语言)
         original_title = content.get("title", "")
         title_matches_language = self._is_language_match(original_title, self.language)
+        logger.info(f"Title language match with {self.language}: {title_matches_language}")
         
         if not title_matches_language:
             # 从AI回复中提取翻译标题的正则表达式模式
@@ -294,25 +320,58 @@ class NewsSummarizer:
         if len(content) > 6000:
             content = content[:6000] + "..."
         
+        # Double check the language setting before building prompt
+        logger.info(f"Building prompt with language setting: {self.language}")
+        
         # 检测标题是否与目标语言匹配
         title_matches_language = self._is_language_match(title, self.language)
+        logger.info(f"Title '{title[:30]}...' matches language {self.language}: {title_matches_language}")
         
         # 根据简报风格调整提示词
         style_description = ""
         if self.brief_style == "informative":
-            style_description = "客观、信息丰富的"
+            style_description = "客观、信息丰富的" if self.language == "zh" else "objective and informative"
         elif self.brief_style == "concise":
-            style_description = "简明扼要的"
+            style_description = "简明扼要的" if self.language == "zh" else "concise"
         elif self.brief_style == "conversational":
-            style_description = "通俗易懂的"
+            style_description = "通俗易懂的" if self.language == "zh" else "conversational"
         
         # 确定输出语言
-        output_language = "中文" if self.language == "zh" else "英文"
+        output_language = "中文" if self.language == "zh" else "English"
         
-        # 构建基本提示词
-        prompt = f"""请为以下新闻内容提供一个{output_language}{style_description}摘要。无论原文是什么语言，摘要语言必须为{output_language}。摘要应帮助读者快速理解文章的主要内容，以便决定是否阅读原文。
+        # Force lowercase comparison for safety
+        if self.language.lower() == "en":
+            # Make English requirement more explicit
+            prompt = f"""Please provide an {style_description} summary of the following news article IN ENGLISH ONLY. 
 
-{'如果原标题与输出语言不匹配，请将标题翻译成' + output_language + '，并以"标题：翻译后的标题"格式置于摘要之前。' if not title_matches_language else '文章标题已经与输出语言匹配，无需翻译。'}
+Regardless of the original language of the article, your summary MUST be in English.
+The summary should help readers quickly understand the main content of the article.
+
+{"If the original title is not in English, please translate it into English and include it as 'Title: [translated title]'" if not title_matches_language else "The title is already in English, no need to translate it."}
+
+Please follow these requirements:
+1. Output MUST be in English only, never in Chinese or any other language
+2. Include the core information and main points of the article
+3. Use clear and concise language
+4. All content must be based on the original text
+5. Do not use phrases like "News Summary" or "In summary" as opening words
+6. Do not include closing phrases like "End of summary"
+7. Do not include metadata such as date or source
+8. Output the English summary directly without explanations
+
+Title: {title}
+
+Content:
+{content}
+
+{"First provide the translated English title (format: 'Title: translated title'), then leave a blank line before the summary." if not title_matches_language else "Provide the English summary directly."}
+"""
+            logger.info("Created ENGLISH prompt for summary generation")
+        else:
+            # Original Chinese prompt remains unchanged
+            prompt = f"""请为以下新闻内容提供一个{style_description}摘要。无论原文是什么语言，摘要语言必须为中文。摘要应帮助读者快速理解文章的主要内容，以便决定是否阅读原文。
+
+{"如果原标题与输出语言不匹配，请将标题翻译成中文，并以\"标题：翻译后的标题\"格式置于摘要之前。" if not title_matches_language else "文章标题已经与输出语言匹配，无需翻译。"}
 
 请遵循以下要求：
 1. 摘要应包含文章的核心信息和要点，保持完整性和可读性
@@ -321,7 +380,7 @@ class NewsSummarizer:
 4. 不要使用"新闻简报"、"摘要"、"总结"等词作为开头
 5. 不要包含"简报结束"、"以上就是..."等作为结尾
 6. 不要包含当前日期、来源信息、参考链接等元数据
-7. 直接输出{output_language}摘要内容，不要添加额外的解释或说明
+7. 直接输出中文摘要内容，不要添加额外的解释或说明
 8. 请严格遵守以上要求，确保生成的摘要符合预期
 
 标题：{title}
@@ -329,7 +388,8 @@ class NewsSummarizer:
 内容：
 {content}
 
-{'请先提供翻译后的' + output_language + '标题（格式为"标题：翻译标题"），然后空一行再给出摘要。' if not title_matches_language else '请直接提供' + output_language + '摘要内容。'}
+{'请先提供翻译后的中文标题（格式为"标题：翻译标题"），然后空一行再给出摘要。' if not title_matches_language else '请直接提供中文摘要内容。'}
 """
-
+            logger.info("Created Chinese prompt for summary generation")
+            
         return prompt

@@ -86,6 +86,10 @@ class AiService:
         Raises:
             AiException: 当AI调用失败时
         """
+        # Log AI provider and model being used
+        logger.info(f"Calling AI service: provider={self.provider}, model={self.ollama_model if self.provider == AiProvider.OLLAMA else self.siliconflow_model if self.provider == AiProvider.SILICONFLOW else self.openai_model}")
+        logger.info(f"Using prompt language hint: {'English' if 'IN ENGLISH ONLY' in prompt else 'Not specified'}")
+        
         for retry in range(max_retries + 1):
             try:
                 if self.provider == AiProvider.OLLAMA:
