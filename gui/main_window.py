@@ -1,13 +1,15 @@
 from PyQt6.QtWidgets import (QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, 
-                           QWidget, QPushButton, QTabWidget, QMessageBox)
+                           QWidget, QPushButton, QTabWidget, QMessageBox,
+                           QSystemTrayIcon)
 from PyQt6.QtCore import Qt
 from core.scheduler import run_task_now, reload_scheduled_tasks
 from gui.components.task_manager import TaskManager
 from gui.components.feed_manager import FeedManager
 from gui.components.recipient_manager import RecipientManager
 from gui.components.scheduler_manager import SchedulerManager
-from core.config_manager import save_task
+from core.config_manager import save_task, get_general_settings
 from core.localization import initialize as init_localization, get_text
+from gui.tray_icon import TrayIcon
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -18,6 +20,10 @@ class MainWindow(QMainWindow):
         
         self.setWindowTitle("NewsDigest")
         self.setMinimumSize(800, 500)
+        
+        # 添加托盘图标和控制是否真正退出的标志
+        self.really_quit = False
+        self.tray_icon = TrayIcon(self)
         
         # Create central widget and main layout
         central_widget = QWidget()
@@ -165,3 +171,23 @@ class MainWindow(QMainWindow):
             print(f"打开设置窗口错误: {error_details}")
             QMessageBox.critical(self, get_text("settings_error"), 
                                f"{get_text('error_opening_settings')}: {str(e)}")
+    
+    def closeEvent(self, event):
+        """重写关闭事件，实现最小化到托盘功能"""
+        # 检查是否应该最小化到托盘而不是退出
+        general_settings = get_general_settings()
+        minimize_to_tray = general_settings.get("minimize_to_tray", True)  # 默认启用
+        
+        if not self.really_quit and minimize_to_tray and self.tray_icon:
+            # 显示气泡提示消息
+            self.tray_icon.showMessage(
+                "NewsDigest",
+                get_text("app_minimized_to_tray"),
+                QSystemTrayIcon.MessageIcon.Information,
+                2000  # 显示2秒
+            )
+            self.hide()  # 隐藏窗口
+            event.ignore()  # 忽略关闭事件
+        else:
+            # 真正退出
+            event.accept()

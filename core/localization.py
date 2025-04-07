@@ -202,6 +202,7 @@ For the full article, please click the "Read Original" link.""",
         # Tray icon translations
         "show_window": "Show Window",
         "exit": "Exit",
+        "app_minimized_to_tray": "Application minimized to system tray",
         
         # Feed management
         "rss_feed_config": "RSS Feed Configuration",
@@ -450,12 +451,13 @@ For the full article, please click the "Read Original" link.""",
         # Tray icon translations
         "show_window": "显示窗口",
         "exit": "退出",
+        "app_minimized_to_tray": "应用程序已最小化到系统托盘",
         
         # Feed management
         "rss_feed_config": "RSS源配置",
         "rss_feed_url": "RSS源地址：",
         "items_to_fetch": "获取新闻条数：",
-        "items": " 条",  # Retain this one, remove the duplicate
+        "items": " 条数",  # Retain this one, remove the duplicate
         "rss_feeds_for_task": "任务的RSS源：",
         "feed_url": "源地址",
         "labels": "标签",
