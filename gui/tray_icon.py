@@ -11,7 +11,7 @@ def TrayIcon(main_window):
         def __init__(self, main_window):
             super().__init__(main_window)
             self.main_window = main_window
-            self.setIcon(QIcon("icon.png"))
+            self.setIcon(QIcon("resources/icon.png"))
             self.setVisible(True)
 
             # 创建右键菜单

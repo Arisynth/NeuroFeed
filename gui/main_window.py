@@ -2,6 +2,7 @@ from PyQt6.QtWidgets import (QMainWindow, QLabel, QVBoxLayout, QHBoxLayout,
                            QWidget, QPushButton, QTabWidget, QMessageBox,
                            QSystemTrayIcon)
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon
 from core.scheduler import run_task_now, reload_scheduled_tasks
 from gui.components.task_manager import TaskManager
 from gui.components.feed_manager import FeedManager
@@ -20,6 +21,9 @@ class MainWindow(QMainWindow):
         
         self.setWindowTitle("NewsDigest")
         self.setMinimumSize(800, 500)
+        
+        # Set application window icon
+        self.setWindowIcon(QIcon("resources/icon.png"))
         
         # 添加托盘图标和控制是否真正退出的标志
         self.really_quit = False
