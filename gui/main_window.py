@@ -11,6 +11,12 @@ from gui.components.scheduler_manager import SchedulerManager
 from core.config_manager import save_task, get_general_settings
 from core.localization import initialize as init_localization, get_text
 from gui.tray_icon import TrayIcon
+from utils.resource_path import get_resource_path  # Import the resource path utility
+import platform
+
+# Import macOS-specific utilities conditionally
+if platform.system() == 'Darwin':  # macOS
+    from utils.macos_utils import hide_dock_icon, show_dock_icon
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -22,8 +28,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("NewsDigest")
         self.setMinimumSize(800, 500)
         
-        # Set application window icon
-        self.setWindowIcon(QIcon("resources/icon.png"))
+        # Set application window icon using the correct resource path
+        icon_path = get_resource_path("resources/icon.png")
+        self.setWindowIcon(QIcon(icon_path))
         
         # 添加托盘图标和控制是否真正退出的标志
         self.really_quit = False
@@ -191,6 +198,11 @@ class MainWindow(QMainWindow):
                 2000  # 显示2秒
             )
             self.hide()  # 隐藏窗口
+            
+            # On macOS, hide the dock icon when minimizing to tray
+            if platform.system() == 'Darwin':
+                hide_dock_icon()
+                
             event.ignore()  # 忽略关闭事件
         else:
             # 真正退出

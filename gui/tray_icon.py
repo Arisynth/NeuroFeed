@@ -6,12 +6,20 @@ def TrayIcon(main_window):
     from PyQt6.QtGui import QIcon, QAction  # QAction now imported from QtGui, not QtWidgets
     from PyQt6.QtCore import Qt
     from core.localization import get_text  # 添加本地化导入
+    from utils.resource_path import get_resource_path  # Import the resource path utility
+    import platform
+    
+    # Import macOS-specific utilities conditionally
+    if platform.system() == 'Darwin':  # macOS
+        from utils.macos_utils import show_dock_icon
 
     class TrayIcon(QSystemTrayIcon):
         def __init__(self, main_window):
             super().__init__(main_window)
             self.main_window = main_window
-            self.setIcon(QIcon("resources/icon.png"))
+            # Use the utility function to get the correct path to the icon
+            icon_path = get_resource_path("resources/icon.png")
+            self.setIcon(QIcon(icon_path))
             self.setVisible(True)
 
             # 创建右键菜单
@@ -35,6 +43,10 @@ def TrayIcon(main_window):
         
         def show_main_window(self):
             """显示主窗口"""
+            # On macOS, show the dock icon when restoring window
+            if platform.system() == 'Darwin':
+                show_dock_icon()
+                
             self.main_window.showNormal()  # 确保窗口正常显示（不是最小化状态）
             self.main_window.activateWindow()  # 激活窗口（使其成为前台窗口）
             self.main_window.raise_()  # 将窗口提升到前面
