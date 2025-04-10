@@ -48,7 +48,8 @@ def initialize_config():
                         "minimize_to_tray": True,
                         "show_notifications": True,
                         "skip_processed_articles": True,
-                        "language": "en"
+                        "language": "en",
+                        "db_retention_days": 30  # Add default db retention days
                     },
                     "user_interests": []
                 }
@@ -85,7 +86,8 @@ def load_config():
                 "minimize_to_tray": True,
                 "show_notifications": True,
                 "skip_processed_articles": False,
-                "language": "en"
+                "language": "en",
+                "db_retention_days": 30  # Add default db retention days
             },
             "user_interests": []
         }

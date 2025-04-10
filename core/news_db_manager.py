@@ -3,6 +3,7 @@ import os
 import datetime
 import re
 from pathlib import Path
+from core.config_manager import get_general_settings  # Add this import
 
 class NewsDBManager:
     def __init__(self, db_path=None):
@@ -175,17 +176,23 @@ class NewsDBManager:
             print(f"Error adding article to database: {e}")
             return False
     
-    def clean_old_articles(self, days=30):
+    def clean_old_articles(self, days=None):
         """
         Remove articles older than specified number of days.
         
         Args:
-            days (int): Number of days to keep articles (default: 30)
+            days (int, optional): Number of days to keep articles.
+                                 If None, will use the value from settings.
             
         Returns:
             int: Number of articles removed
         """
         try:
+            # If days not specified, get from settings
+            if days is None:
+                general_settings = get_general_settings()
+                days = general_settings.get("db_retention_days", 30)  # Default to 30 days if not set
+            
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             

@@ -99,6 +99,7 @@ class SettingsWindow(QDialog):
         self.show_notifications.stateChanged.connect(self.mark_as_changed)
         self.skip_processed_checkbox.stateChanged.connect(self.mark_as_changed)
         self.language_combo.currentIndexChanged.connect(self.mark_as_changed)
+        self.retention_days.valueChanged.connect(self.mark_as_changed)
     
     def mark_as_changed(self):
         """标记有未保存的更改"""
@@ -443,6 +444,27 @@ class SettingsWindow(QDialog):
         data_group = QGroupBox(get_text("data_management"))
         data_layout = QVBoxLayout(data_group)
         
+        # 添加数据库保留天数设置
+        retention_layout = QHBoxLayout()
+        retention_label = QLabel(get_text("db_retention_days"))
+        self.retention_days = QSpinBox()
+        self.retention_days.setRange(7, 365)  # 允许7天到1年的范围
+        self.retention_days.setValue(general_settings.get("db_retention_days", 30))  # 默认30天
+        self.retention_days.setSuffix(" " + get_text("days"))
+        self.retention_days.valueChanged.connect(self.mark_as_changed)
+        
+        retention_layout.addWidget(retention_label)
+        retention_layout.addWidget(self.retention_days)
+        retention_layout.addStretch()
+        
+        data_layout.addLayout(retention_layout)
+        
+        # 添加保留天数说明
+        retention_description = QLabel(get_text("db_retention_desc"))
+        retention_description.setWordWrap(True)
+        retention_description.setStyleSheet("color: #666; font-size: 11px;")
+        data_layout.addWidget(retention_description)
+        
         # 添加清除缓存按钮
         clear_cache_btn = QPushButton(get_text("clear_cache"))
         clear_cache_btn.setToolTip(get_text("clear_cache_tooltip"))
@@ -555,7 +577,8 @@ class SettingsWindow(QDialog):
             "minimize_to_tray": self.minimize_to_tray.isChecked(),
             "show_notifications": self.show_notifications.isChecked(),
             "skip_processed_articles": self.skip_processed_checkbox.isChecked(),
-            "language": current_language  # 确保这里设置了语言
+            "language": current_language,  # 确保这里设置了语言
+            "db_retention_days": self.retention_days.value()  # 保存数据库保留天数设置
         }
         
         # 首先更新通用设置
