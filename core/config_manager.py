@@ -3,12 +3,16 @@ import os
 import uuid
 import shutil
 import logging
+from core.version import VERSION, get_version_string
 
 logger = logging.getLogger(__name__)
 
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
 TEMPLATE_PATH = os.path.join(CONFIG_DIR, "config.template.json")
+
+# Add version to the exported variables
+__version__ = VERSION
 
 def initialize_config():
     """Initialize the configuration file if it doesn't exist"""
@@ -269,3 +273,7 @@ def update_general_settings(settings):
             logger.error(f"Error verifying config: {e}")
             
     return success
+
+def get_app_version(include_build_info=False):
+    """Return the application version string."""
+    return get_version_string(include_build_info)

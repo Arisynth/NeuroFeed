@@ -100,26 +100,35 @@ class CustomStatusBar(QStatusBar):
     def _open_log_file(self):
         """打开最新的日志文件"""
         log_file = self.status_manager.get_latest_log_file()
-        if log_file and log_file.exists():
-            import sys
-            import subprocess
-            
-            try:
-                if sys.platform == 'darwin':  # macOS
-                    subprocess.run(['open', str(log_file)])
-                elif sys.platform == 'win32':  # Windows
-                    subprocess.run(['start', str(log_file)], shell=True)
-                else:  # Linux
-                    subprocess.run(['xdg-open', str(log_file)])
-            except Exception as e:
-                QMessageBox.warning(
-                    self.parent(),
-                    get_text("error"),
-                    f"{get_text('error_opening_log')}: {str(e)}"
-                )
-        else:
+        if not log_file:
             QMessageBox.information(
                 self.parent(),
                 get_text("info"),
                 get_text("no_log_file")
+            )
+            return
+            
+        if not log_file.exists():
+            QMessageBox.warning(
+                self.parent(),
+                get_text("error"),
+                get_text("log_file_not_found")
+            )
+            return
+            
+        import sys
+        import subprocess
+        
+        try:
+            if sys.platform == 'darwin':  # macOS
+                subprocess.run(['open', str(log_file)])
+            elif sys.platform == 'win32':  # Windows
+                subprocess.run(['start', str(log_file)], shell=True)
+            else:  # Linux
+                subprocess.run(['xdg-open', str(log_file)])
+        except Exception as e:
+            QMessageBox.warning(
+                self.parent(),
+                get_text("error"),
+                f"{get_text('error_opening_log')}: {str(e)}"
             )

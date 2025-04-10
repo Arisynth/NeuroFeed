@@ -276,6 +276,10 @@ For the full article, please click the "Read Original" link.""",
         "ready": "Ready",
         "error_opening_log": "Failed to open log file",
         "no_log_file": "No log file available",
+        
+        # Add version-related translations
+        "version": "Version",
+        "app_version": "Application Version",
     },
     
     # Chinese translations
@@ -541,6 +545,10 @@ For the full article, please click the "Read Original" link.""",
         "ready": "准备就绪",
         "error_opening_log": "打开日志文件失败",
         "no_log_file": "暂无可用的日志文件",
+        
+        # Add version-related translations
+        "version": "版本",
+        "app_version": "应用程序版本",
     }
 }
 

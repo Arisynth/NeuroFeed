@@ -8,7 +8,7 @@ from gui.components.task_manager import TaskManager
 from gui.components.feed_manager import FeedManager
 from gui.components.recipient_manager import RecipientManager
 from gui.components.scheduler_manager import SchedulerManager
-from core.config_manager import save_task, get_general_settings
+from core.config_manager import save_task, get_general_settings, get_app_version
 from core.localization import initialize as init_localization, get_text
 from gui.tray_icon import TrayIcon
 from utils.resource_path import get_resource_path  # Import the resource path utility
@@ -28,7 +28,13 @@ class MainWindow(QMainWindow):
         # Initialize localization
         init_localization()
         
-        self.setWindowTitle("NewsDigest")
+        # Get application name and version
+        self.app_name = "NeuroFeed"
+        self.app_version = get_app_version()
+        
+        # Set window title with version
+        self.setWindowTitle(f"{self.app_name} v{self.app_version}")
+        
         self.setMinimumSize(800, 500)
         
         # Set application window icon using the correct resource path
