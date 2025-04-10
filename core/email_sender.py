@@ -7,9 +7,10 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 from core.encryption import decrypt_password
 from core.localization import get_text, get_current_language
+from .log_manager import LogManager
 
-# 配置日志
-logger = logging.getLogger("email_sender")
+log_manager = LogManager()
+logger = log_manager.get_logger("email_sender")
 
 class EmailSendError(Exception):
     """表示邮件发送过程中的错误"""

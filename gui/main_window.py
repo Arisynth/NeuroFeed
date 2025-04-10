@@ -13,6 +13,9 @@ from core.localization import initialize as init_localization, get_text
 from gui.tray_icon import TrayIcon
 from utils.resource_path import get_resource_path  # Import the resource path utility
 import platform
+from gui.components.status_bar import CustomStatusBar
+from core.status_manager import StatusManager
+from core.task_status import TaskStatus  # 添加这个导入
 
 # Import macOS-specific utilities conditionally
 if platform.system() == 'Darwin':  # macOS
@@ -84,9 +87,24 @@ class MainWindow(QMainWindow):
         
         main_layout.addLayout(buttons_layout)
         
+        # 添加自定义状态栏 (在main_layout.addLayout(buttons_layout)之后)
+        self.status_bar = CustomStatusBar()
+        self.setStatusBar(self.status_bar)
+        
         # 一定要初始化任务，否则组件不会显示任务信息
         if self.task_manager.current_task:
             self.on_task_changed(self.task_manager.current_task)
+        
+        # 初始化状态显示
+        self.status_manager = StatusManager()
+        
+        # 显示初始状态
+        initial_task_id = self.status_manager.create_task("系统状态")
+        self.status_manager.update_task(
+            initial_task_id,
+            status=TaskStatus.COMPLETED,
+            message=get_text("ready")
+        )
         
         # 打印日志确认主窗口已正确初始化
         print("主窗口初始化完成")

@@ -11,10 +11,13 @@ from ai_processor.summarizer import NewsSummarizer
 from typing import Dict, List, Any
 from core.email_sender import EmailSender, EmailSendError
 from .news_db_manager import NewsDBManager
+from .log_manager import LogManager
+from core.status_manager import StatusManager
+from core.task_status import TaskStatus
 
-# Fix the logging format string issue
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("scheduler")
+# 替换现有的日志设置
+log_manager = LogManager()
+logger = log_manager.get_logger("scheduler")
 
 # Global variables for task queue management
 task_queue = queue.Queue()
@@ -37,7 +40,7 @@ def process_task_queue():
     while True:
         try:
             # 从队列获取下一个任务
-            task_id = task_queue.get(block=True)
+            task_id = task_queue.get(block=True, timeout=300)  # 5分钟超时
             
             with task_lock:
                 is_task_running = True
@@ -47,42 +50,82 @@ def process_task_queue():
             logger.info(f"队列中剩余任务数量: {task_queue.qsize()}")
             logger.info(f"=====================================================\n")
             
-            # 实际执行任务
-            _execute_task(task_id)
-            
-            # 标记队列任务完成
-            task_queue.task_done()
-            
-            with task_lock:
-                is_task_running = False
+            try:
+                # 实际执行任务
+                _execute_task(task_id)
                 
-            logger.info(f"\n=====================================================")
-            logger.info(f"任务 ID:{task_id or '所有任务'} 执行完成")
-            logger.info(f"队列中剩余任务数量: {task_queue.qsize()}")
-            logger.info(f"=====================================================\n")
+            except Exception as e:
+                # 捕获任务执行过程中的异常，但不退出线程
+                import traceback
+                logger.error(f"执行任务 ID:{task_id} 时发生异常: {str(e)}")
+                logger.error(f"异常详情:\n{traceback.format_exc()}")
+                
+                # 通知状态管理器任务失败
+                try:
+                    status_manager = StatusManager()
+                    status_manager.update_task(
+                        task_id,
+                        status=TaskStatus.FAILED,
+                        message=f"任务执行失败: {str(e)}",
+                        error=str(e)
+                    )
+                except Exception as status_error:
+                    logger.error(f"更新任务状态失败: {str(status_error)}")
+            
+            finally:
+                # 无论发生什么，确保标记队列任务完成
+                task_queue.task_done()
+                
+                with task_lock:
+                    is_task_running = False
+                    
+                logger.info(f"\n=====================================================")
+                logger.info(f"任务 ID:{task_id or '所有任务'} 处理完成")
+                logger.info(f"队列中剩余任务数量: {task_queue.qsize()}")
+                logger.info(f"=====================================================\n")
+            
+        except queue.Empty:
+            # 队列超时，但继续等待
+            logger.info("任务队列空闲5分钟，继续等待新任务...")
+            continue
             
         except Exception as e:
+            # 捕获其他异常，但不退出线程
             import traceback
             logger.error(f"任务队列处理异常: {str(e)}")
             logger.error(f"详细追踪:\n{traceback.format_exc()}")
             
             with task_lock:
                 is_task_running = False
+                
+            # 短暂暂停后继续
+            time.sleep(5)
 
 def ensure_processor_running():
     """确保任务处理线程在运行"""
     global task_processing_thread
     
-    if task_processing_thread is None or not task_processing_thread.is_alive():
-        logger.info("启动新的任务队列处理线程")
-        task_processing_thread = threading.Thread(target=process_task_queue, daemon=True)
-        task_processing_thread.start()
+    with task_lock:
+        # 检查线程是否已存在且正在运行
+        if task_processing_thread is None or not task_processing_thread.is_alive():
+            logger.info("启动新的任务队列处理线程")
+            task_processing_thread = threading.Thread(target=process_task_queue, daemon=True)
+            task_processing_thread.start()
+        else:
+            logger.info("任务处理线程已在运行中")
 
 def _execute_task(task_id=None):
     """实际执行任务的函数 (被process_task_queue调用)"""
     logger.info(f"\n=====================================================")
     logger.info(f"开始执行{'指定' if task_id else '所有'}任务")
     logger.info(f"=====================================================\n")
+    
+    # 获取状态管理器实例
+    status_manager = StatusManager()
+    task_state_id = status_manager.create_task("RSS处理任务")
+    status_manager.update_task(task_state_id, 
+                             status=TaskStatus.RUNNING,
+                             message="正在加载任务配置...")
     
     # 加载配置和任务
     config = load_config()
@@ -127,6 +170,7 @@ def _execute_task(task_id=None):
             return
     
     # 初始化RSS解析器、内容过滤器和摘要生成器
+    status_manager.update_task(task_state_id, message="正在初始化服务...")
     rss_parser = RssParser()
     # 确保使用最新配置
     is_skipping = rss_parser.refresh_settings()
@@ -135,14 +179,24 @@ def _execute_task(task_id=None):
     try:
         content_filter = ContentFilter(config)
         summarizer = NewsSummarizer(config)
+        status_manager.update_task(task_state_id, progress=10)
     except Exception as e:
+        status_manager.update_task(task_state_id,
+                                 status=TaskStatus.FAILED,
+                                 error=str(e))
         logger.error(f"初始化AI服务失败: {str(e)}")
         logger.error("任务执行中止，AI服务是必须的")
         return
     
     # 逐个处理任务
-    for task in tasks:
+    total_tasks = len(tasks)
+    for task_index, task in enumerate(tasks):
         try:
+            current_progress = 10 + (task_index / total_tasks * 90)  # 10%-100%
+            status_manager.update_task(task_state_id,
+                                     message=f"处理任务: {task.name}",
+                                     progress=int(current_progress))
+            
             logger.info(f"\n=====================================================")
             logger.info(f"开始处理任务: {task.name} (ID: {task.task_id})")
             logger.info(f"=====================================================\n")
@@ -222,6 +276,7 @@ def _execute_task(task_id=None):
             logger.info(f"总条目数: {total_items}")
             
             # 收集所有内容
+            status_manager.update_task(task_state_id, message=f"正在获取RSS内容...")
             all_contents = []
             logger.info(f"\n============ 整合内容 ============")
             for feed_url, result in feed_results.items():
@@ -251,8 +306,16 @@ def _execute_task(task_id=None):
             logger.info(f"待过滤内容总数: {len(all_contents)}")
             logger.info(f"AI模型: {content_filter.ollama_model or content_filter.openai_model}")
             
+            # RSS获取完成后更新进度
+            status_manager.update_task(task_state_id, 
+                                     message=f"正在进行AI内容过滤...",
+                                     progress=int(current_progress + 30))
+            
             try:
                 kept_contents, discarded_contents = content_filter.filter_content_batch(all_contents)
+                status_manager.update_task(task_state_id,
+                                         message=f"正在生成内容摘要...",
+                                         progress=int(current_progress + 60))
                 
                 # 标记丢弃的内容为已处理 - 使用新的任务特定标记
                 for content in discarded_contents:
@@ -334,6 +397,10 @@ def _execute_task(task_id=None):
             
             # 如果有收件人，则发送邮件
             if kept_contents and task.recipients:
+                status_manager.update_task(task_state_id,
+                                         message=f"正在发送邮件...",
+                                         progress=int(current_progress + 80))
+                
                 logger.info(f"\n============ 开始发送邮件 ============")
                 logger.info(f"任务: {task.name}")
                 logger.info(f"收件人数量: {len(task.recipients)}")
@@ -386,12 +453,21 @@ def _execute_task(task_id=None):
             logger.info(f"总耗时: {(datetime.now() - datetime.fromisoformat(task.last_run)).total_seconds():.2f} 秒")
             
         except Exception as e:
+            status_manager.update_task(task_state_id,
+                                     message=f"任务 {task.name} 执行出错",
+                                     error=str(e))
             import traceback
             logger.error(f"\n============ 任务执行出错 ============")
             logger.error(f"任务: {task.name}")
             logger.error(f"错误类型: {type(e).__name__}")
             logger.error(f"错误信息: {str(e)}")
             logger.error(f"详细追踪:\n{traceback.format_exc()}")
+    
+    # 任务全部完成
+    status_manager.update_task(task_state_id,
+                             status=TaskStatus.COMPLETED,
+                             progress=100,
+                             message="所有任务执行完成")
     
     logger.info(f"\n=====================================================")
     logger.info(f"所有任务执行完成")
@@ -590,6 +666,14 @@ def get_scheduler_status():
 def run_task_now(task_id):
     """立即执行指定任务 (放入队列)"""
     logger.info(f"立即执行任务 ID: {task_id}")
+    
+    # 获取状态管理器，创建任务状态
+    status_manager = StatusManager()
+    status_manager.update_task(
+        task_id,
+        status=TaskStatus.PENDING,
+        message="任务已加入队列，等待执行..."
+    )
     
     # 将任务添加到队列而不是创建新线程
     execute_task(task_id)

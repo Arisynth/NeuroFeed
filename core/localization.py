@@ -270,6 +270,12 @@ For the full article, please click the "Read Original" link.""",
         "email_test": "Email Test",
         "test_email_success": "Successfully sent test email to: {}",
         "test_email_failed": "Failed to send test email to: {}",
+        
+        # Status bar related
+        "view_log": "View Log",
+        "ready": "Ready",
+        "error_opening_log": "Failed to open log file",
+        "no_log_file": "No log file available",
     },
     
     # Chinese translations
@@ -529,6 +535,12 @@ For the full article, please click the "Read Original" link.""",
         "email_test": "邮件测试",
         "test_email_success": "成功发送测试邮件至：{}",
         "test_email_failed": "发送测试邮件失败：{}",
+        
+        # Status bar related
+        "view_log": "查看日志",
+        "ready": "准备就绪",
+        "error_opening_log": "打开日志文件失败",
+        "no_log_file": "暂无可用的日志文件",
     }
 }
 
