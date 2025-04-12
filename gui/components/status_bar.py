@@ -52,8 +52,8 @@ class CustomStatusBar(QStatusBar):
         # 连接日志按钮
         self.log_button.clicked.connect(self._open_log_file)
         
-        # 连接状态管理器
-        self.status_manager = StatusManager()
+        # 连接状态管理器 - 使用更安全的实例获取方法
+        self.status_manager = StatusManager.instance()
         self.status_manager.status_updated.connect(self.update_status)
     
     def _update_animation(self):

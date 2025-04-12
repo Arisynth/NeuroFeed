@@ -3,10 +3,24 @@ from core.scheduler import start_scheduler, get_scheduler_status
 from PyQt6.QtWidgets import QApplication
 import sys
 import logging
+import faulthandler
+import platform
+
+# Enable faulthandler to get better crash reports
+faulthandler.enable()
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("main")
+
+# Try to pre-load PyObjC on macOS to avoid issues with dock icon management
+if platform.system() == 'Darwin':
+    try:
+        import objc
+        import AppKit
+        logger.info("Successfully pre-loaded PyObjC and AppKit")
+    except ImportError:
+        logger.warning("Unable to import PyObjC/AppKit - dock icon management may not work correctly")
 
 def main():
     app = QApplication(sys.argv)

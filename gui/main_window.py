@@ -101,8 +101,8 @@ class MainWindow(QMainWindow):
         if self.task_manager.current_task:
             self.on_task_changed(self.task_manager.current_task)
         
-        # 初始化状态显示
-        self.status_manager = StatusManager()
+        # 初始化状态显示 - 使用更安全的实例获取方法
+        self.status_manager = StatusManager.instance()
         
         # 显示初始状态
         initial_task_id = self.status_manager.create_task("系统状态")

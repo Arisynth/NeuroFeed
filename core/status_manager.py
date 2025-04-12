@@ -14,19 +14,25 @@ class StatusManager(QObject):
     
     _instance = None
     
-    def __new__(cls):
+    @classmethod
+    def instance(cls):
         if cls._instance is None:
-            cls._instance = super(StatusManager, cls).__new__(cls)
-            cls._instance.__initialized = False
+            cls._instance = StatusManager()
         return cls._instance
     
     def __init__(self):
-        if not self.__initialized:
-            super().__init__()
-            self.__initialized = True
-            self._active_tasks: Dict[str, TaskState] = {}
-            self._task_queue = deque(maxlen=100)  # 保留最近100个任务的状态
-            self._log_manager = LogManager()
+        # 防止多次初始化 QObject
+        if StatusManager._instance is not None:
+            return
+        
+        # 确保只有第一个实例初始化父类
+        super().__init__()
+        self._active_tasks = {}
+        self._task_queue = deque(maxlen=100)  # 保留最近100个任务的状态
+        self._log_manager = LogManager()
+        
+        # 将自身设置为单例实例
+        StatusManager._instance = self
             
     def create_task(self, name: str) -> str:
         """创建新任务并返回任务ID"""
