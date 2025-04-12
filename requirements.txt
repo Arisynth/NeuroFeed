@@ -4,3 +4,6 @@ PyQt6-sip==13.6.0
 schedule==1.2.1
 feedparser==6.0.11
 requests==2.32.3
+beautifulsoup4>=4.9  # 添加 beautifulsoup4
+pytz>=2023.3        # 添加 pytz
+lxml>=4.9           # 添加 lxml

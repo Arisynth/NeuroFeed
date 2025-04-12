@@ -223,6 +223,36 @@ class EmailSender:
         # 对内容列表进行排序并返回
         return sorted(contents, key=get_sort_key)
     
+    def _convert_published_date_to_local(self, pub_date: str) -> datetime:
+        """
+        尝试将ISO格式的发布日期字符串转换为datetime对象，只对有时区信息的进行转换
+        
+        Args:
+            pub_date: ISO格式的日期字符串
+            
+        Returns:
+            datetime: 转换后的datetime对象，如果转换失败则返回None
+        """
+        if not pub_date:
+            return None
+            
+        try:
+            # 尝试解析ISO格式日期
+            date_obj = datetime.fromisoformat(pub_date.replace('Z', '+00:00'))
+            
+            # 只有当日期对象有时区信息时才进行转换
+            if date_obj.tzinfo is not None:
+                # 转换为本地时区
+                local_tz = datetime.now().astimezone().tzinfo
+                return date_obj.astimezone(local_tz)
+            
+            # 无时区信息则直接使用
+            return date_obj
+            
+        except (ValueError, TypeError):
+            # 如果解析失败，返回None
+            return None
+    
     def _create_html_digest(self, sorted_contents: List[Dict[str, Any]], 
                            task_name: str, date_str: str) -> str:
         """创建HTML格式的邮件内容"""
@@ -285,13 +315,12 @@ class EmailSender:
             pub_date_html = ""
             pub_date = content.get("published", "")
             if pub_date:
-                try:
-                    # 尝试解析ISO格式日期
-                    from datetime import datetime
-                    date_obj = datetime.fromisoformat(pub_date)
+                # 转换发布日期到本地时区并格式化显示
+                date_obj = self._convert_published_date_to_local(pub_date)
+                if date_obj:
                     formatted_date = date_obj.strftime("%Y年%m月%d日 %H:%M") if self.language == "zh" else date_obj.strftime("%Y-%m-%d %H:%M")
                     pub_date_html = f'<span class="pubdate">{get_text("publish_time")}: {formatted_date}</span>'
-                except (ValueError, TypeError):
+                else:
                     # 如果解析失败，直接使用原始字符串
                     pub_date_html = f'<span class="pubdate">{get_text("publish_time")}: {pub_date}</span>'
             

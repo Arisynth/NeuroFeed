@@ -6,6 +6,7 @@ import logging
 from typing import List, Dict, Any, Optional
 import hashlib
 from bs4 import BeautifulSoup
+import pytz  # 添加时区支持
 from .news_db_manager import NewsDBManager
 from .config_manager import load_config
 from .wechat_parser import WeChatParser
@@ -35,6 +36,11 @@ class RssParser:
         self.skip_processed = config.get("global_settings", {}).get("general_settings", {}).get("skip_processed_articles", False)
         logger.info(f"初始化时 - 跳过已处理文章: {'是' if self.skip_processed else '否'}")
         logger.debug(f"配置内容: {config}")
+        
+        # 从配置加载时区处理设置
+        general_settings = config.get("global_settings", {}).get("general_settings", {})
+        self.assume_utc = general_settings.get("assume_utc_for_no_timezone", True)
+        logger.info(f"时区设置 - 无时区信息时假定为UTC: {'是' if self.assume_utc else '否'}")
     
     def refresh_settings(self):
         """刷新配置设置，确保使用最新的配置值"""
@@ -48,11 +54,40 @@ class RssParser:
             logger.debug(f"设置变化: {prev_setting} -> {self.skip_processed}")
             logger.debug(f"配置结构: {config.get('global_settings', {}).get('general_settings', {})}")
             
+            # 刷新时区处理设置
+            general_settings = config.get("global_settings", {}).get("general_settings", {})
+            self.assume_utc = general_settings.get("assume_utc_for_no_timezone", True)
+            
+            logger.info(f"时区设置 - 无时区信息时假定为UTC: {'是' if self.assume_utc else '否'}")
+            
             # 通过显式返回布尔值避免任何转换问题
             return self.skip_processed is True
         except Exception as e:
             logger.error(f"刷新设置时出错: {e}")
             return False
+    
+    def _convert_to_local_time(self, dt: datetime) -> datetime:
+        """
+        只对有时区信息的日期进行转换，没有时区信息的保持原样
+        
+        Args:
+            dt: 输入的datetime对象
+            
+        Returns:
+            datetime: 转换后的datetime对象
+        """
+        if dt is None:
+            return None
+            
+        # 只有当datetime有时区信息时才进行转换
+        if dt.tzinfo is not None:
+            # 获取本地时区
+            local_tz = datetime.now().astimezone().tzinfo
+            # 转换到本地时区并返回
+            return dt.astimezone(local_tz)
+            
+        # 无时区信息则保持原样
+        return dt
     
     def fetch_feed(self, feed_url: str, items_count: int = 10, task_id: str = None, recipients: List[str] = None) -> Dict[str, Any]:
         """获取RSS Feed内容
@@ -234,10 +269,17 @@ class RssParser:
                 
                 # 提取发布日期，如果存在
                 published_date = None
+                pub_datetime = None
                 if hasattr(entry, 'published_parsed') and entry.published_parsed:
-                    published_date = datetime(*entry.published_parsed[:6]).isoformat()
+                    pub_datetime = datetime(*entry.published_parsed[:6])
+                    # 转换为本地时区
+                    pub_datetime = self._convert_to_local_time(pub_datetime)
+                    published_date = pub_datetime.isoformat()
                 elif hasattr(entry, 'updated_parsed') and entry.updated_parsed:
-                    published_date = datetime(*entry.updated_parsed[:6]).isoformat()
+                    pub_datetime = datetime(*entry.updated_parsed[:6])
+                    # 转换为本地时区
+                    pub_datetime = self._convert_to_local_time(pub_datetime)
+                    published_date = pub_datetime.isoformat()
                 
                 # 获取标题和链接
                 title = entry.title if hasattr(entry, 'title') else "无标题"

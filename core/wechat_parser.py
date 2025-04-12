@@ -2,8 +2,10 @@ import requests
 import logging
 import hashlib
 from datetime import datetime
+import pytz  # 添加时区支持
 from bs4 import BeautifulSoup
 from typing import Dict, Any, List
+from .config_manager import load_config  # 添加导入
 
 logger = logging.getLogger("wechat_parser")
 
@@ -19,6 +21,34 @@ class WeChatParser:
             warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
         except ImportError:
             pass
+            
+        # 从配置加载时区处理设置
+        config = load_config()
+        general_settings = config.get("global_settings", {}).get("general_settings", {})
+        self.assume_utc = general_settings.get("assume_utc_for_no_timezone", True)
+    
+    def _convert_to_local_time(self, dt: datetime) -> datetime:
+        """
+        只对有时区信息的日期进行转换，没有时区信息的保持原样
+        
+        Args:
+            dt: 输入的datetime对象
+            
+        Returns:
+            datetime: 转换后的datetime对象
+        """
+        if dt is None:
+            return None
+            
+        # 只有当datetime有时区信息时才进行转换
+        if dt.tzinfo is not None:
+            # 获取本地时区
+            local_tz = datetime.now().astimezone().tzinfo
+            # 转换到本地时区并返回
+            return dt.astimezone(local_tz)
+            
+        # 无时区信息则保持原样
+        return dt
     
     def parse_wechat_source(self, feed_url: str, items_count: int = 10) -> Dict[str, Any]:
         """Parse WeChat specific sources which don't follow standard feed formats
@@ -173,7 +203,18 @@ class WeChatParser:
             link = link_tag.text if link_tag else feed_url
             
             pub_date_tag = item.find('pubDate')
-            published = pub_date_tag.text if pub_date_tag else datetime.now().isoformat()
+            if pub_date_tag and pub_date_tag.text:
+                try:
+                    # 尝试解析RSS日期格式
+                    from email.utils import parsedate_to_datetime
+                    pub_datetime = parsedate_to_datetime(pub_date_tag.text)
+                    # 转换为本地时区
+                    pub_datetime = self._convert_to_local_time(pub_datetime)
+                    published = pub_datetime.isoformat()
+                except Exception:
+                    published = pub_date_tag.text
+            else:
+                published = datetime.now().isoformat()
             
             items.append({
                 "title": title,
@@ -213,7 +254,17 @@ class WeChatParser:
             link = link_tag.get('href') if link_tag and link_tag.has_attr('href') else feed_url
             
             pub_date_tag = entry.find('published') or entry.find('updated')
-            published = pub_date_tag.text if pub_date_tag else datetime.now().isoformat()
+            if pub_date_tag and pub_date_tag.text:
+                try:
+                    # 尝试解析ISO格式日期
+                    pub_datetime = datetime.fromisoformat(pub_date_tag.text.replace('Z', '+00:00'))
+                    # 转换为本地时区
+                    pub_datetime = self._convert_to_local_time(pub_datetime)
+                    published = pub_datetime.isoformat()
+                except ValueError:
+                    published = pub_date_tag.text
+            else:
+                published = datetime.now().isoformat()
             
             items.append({
                 "title": title,
