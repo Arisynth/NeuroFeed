@@ -1,26 +1,29 @@
 from PyQt6.QtWidgets import QStatusBar, QLabel, QPushButton, QHBoxLayout, QWidget, QMessageBox
-from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtCore import QTimer, Qt, QCoreApplication
 from core.status_manager import StatusManager
 from core.task_status import TaskStatus
 from core.localization import get_text
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 class CustomStatusBar(QStatusBar):
     def __init__(self, parent=None):
         super().__init__(parent)
         
-        # 创建布局和组件
+        # Create layout and components
         container = QWidget()
         layout = QHBoxLayout(container)
         layout.setContentsMargins(5, 0, 5, 0)
         
-        # 状态文本标签
+        # Status text label
         self.status_label = QLabel("")
         
-        # 进度标签
+        # Progress label
         self.progress_label = QLabel("")
         
-        # 日志按钮
+        # Log button
         self.log_button = QPushButton(get_text("view_log"))
         self.log_button.setStyleSheet("""
             QPushButton { 
@@ -36,78 +39,88 @@ class CustomStatusBar(QStatusBar):
         """)
         self.log_button.setCursor(Qt.CursorShape.PointingHandCursor)
         
-        # 添加到布局
+        # Add to layout
         layout.addWidget(self.status_label, stretch=1)
         layout.addWidget(self.progress_label)
         layout.addWidget(self.log_button)
         
-        # 添加到状态栏
+        # Add to status bar
         self.addWidget(container, 1)
         
-        # 动画计时器
+        # Animation timer
         self.animation_timer = QTimer()
         self.animation_timer.timeout.connect(self._update_animation)
         self.animation_dots = 0
         
-        # 连接日志按钮
+        # Connect log button
         self.log_button.clicked.connect(self._open_log_file)
         
-        # 连接状态管理器 - 确保完全初始化
-        self.status_manager = StatusManager()  # 使用构造函数强制初始化
-        
-        # 在QTimer中延迟连接信号，确保状态管理器已完全初始化
-        QTimer.singleShot(0, self._connect_signals)
+        # Don't immediately connect to status_manager to prevent Qt metaclass recursion
+        # Use a delayed connection via QTimer
+        self.status_manager = None
+        QTimer.singleShot(100, self._initialize_status_manager)
     
-    def _connect_signals(self):
-        """连接状态管理器的信号 - 解决初始化顺序问题"""
+    def _initialize_status_manager(self):
+        """Initialize the status manager with a delay to avoid recursion issues"""
         try:
+            # Get the instance without creating a new one if possible
+            self.status_manager = StatusManager.instance()
             self.status_manager.status_updated.connect(self.update_status)
+            logger.info("Successfully connected to status manager signals")
         except Exception as e:
-            print(f"Error connecting to status_manager signals: {e}")
+            logger.error(f"Error connecting to status_manager signals: {e}")
     
     def _update_animation(self):
-        """更新加载动画"""
+        """Update loading animation"""
         self.animation_dots = (self.animation_dots + 1) % 4
         if hasattr(self, 'current_message'):
             base_message = self.current_message.rstrip('.')
             self.status_label.setText(f"{base_message}{'.' * self.animation_dots}")
     
     def update_status(self, task_state):
-        """更新状态显示"""
+        """Update status display"""
         self.current_message = task_state.message
         
-        # 根据状态处理动画和颜色
+        # Handle animation and colors based on status
         if task_state.status == TaskStatus.RUNNING:
             if not self.animation_timer.isActive():
                 self.animation_timer.start(500)
-            self.status_label.setStyleSheet("color: #2980b9;")  # 蓝色表示运行中
+            self.status_label.setStyleSheet("color: #2980b9;")  # Blue for running
             self.progress_label.setStyleSheet("color: #2980b9; font-weight: bold;")
         elif task_state.status == TaskStatus.COMPLETED:
             self.animation_timer.stop()
-            self.status_label.setStyleSheet("color: #27ae60;")  # 绿色表示完成
+            self.status_label.setStyleSheet("color: #27ae60;")  # Green for completion
         elif task_state.status == TaskStatus.FAILED:
             self.animation_timer.stop()
-            self.status_label.setStyleSheet("color: #c0392b;")  # 红色表示失败
+            self.status_label.setStyleSheet("color: #c0392b;")  # Red for failure
         else:
             self.animation_timer.stop()
             self.status_label.setStyleSheet("")
             
-        # 更新进度
+        # Update progress
         if task_state.progress > 0:
             self.progress_label.setText(f"{task_state.progress}%")
         else:
             self.progress_label.clear()
             
-        # 更新状态文本
+        # Update status text
         self.status_label.setText(task_state.message)
         
-        # 如果任务完成或失败，停止动画
+        # If task is complete or failed, stop animation
         if task_state.status in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELED]:
             self.animation_timer.stop()
             self.progress_label.clear()
     
     def _open_log_file(self):
-        """打开最新的日志文件"""
+        """Open the latest log file"""
+        if not self.status_manager:
+            QMessageBox.warning(
+                self.parent(),
+                get_text("error"),
+                "Status manager not initialized"
+            )
+            return
+            
         log_file = self.status_manager.get_latest_log_file()
         if not log_file:
             QMessageBox.information(
@@ -141,3 +154,9 @@ class CustomStatusBar(QStatusBar):
                 get_text("error"),
                 f"{get_text('error_opening_log')}: {str(e)}"
             )
+    
+    def handle_exit_action(self):
+        """Handle exit action from menu or dock"""
+        logger.info("Exit action triggered")
+        # Use QCoreApplication to ensure proper application quit
+        QCoreApplication.instance().quit()

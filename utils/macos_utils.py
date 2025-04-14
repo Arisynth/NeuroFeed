@@ -1,95 +1,162 @@
 """
-macOS specific utilities for managing dock icon visibility.
+macOS specific utilities for managing dock icon visibility and application lifecycle.
 Provides fallback mechanisms when PyObjC/AppKit is not available.
 """
 import platform
 import logging
-import subprocess
-import os
 import sys
+from PyQt6.QtCore import QCoreApplication
 
 # Configure logger
 logger = logging.getLogger(__name__)
 
-# Check if we're on macOS
-IS_MACOS = platform.system() == 'Darwin'
+# Track dock icon state to prevent redundant operations
+_dock_icon_visible = False
+_app_delegate = None
 
-# Flag to track if we're using PyObjC or fallback methods
-using_pyobjc = False
-using_fallback = False
-
-# First attempt: Try to use PyObjC/AppKit directly
-if IS_MACOS:
+def setup_macos_app():
+    """Configure the macOS application with proper delegate and menu handling"""
+    if platform.system() != 'Darwin':
+        return False
+        
     try:
         import objc
-        from Foundation import NSBundle
-        from AppKit import NSApp, NSApplicationActivationPolicyRegular, NSApplicationActivationPolicyAccessory
+        import AppKit
+        from PyQt6.QtWidgets import QApplication
         
-        # Mark that we're using PyObjC
-        using_pyobjc = True
-        logger.info("Successfully loaded PyObjC/AppKit for dock icon management")
-    except ImportError as e:
-        logger.warning(f"PyObjC/AppKit not available: {e} - will try fallback methods")
-        using_pyobjc = False
-
-def _run_osascript(script):
-    """Run an AppleScript command using osascript"""
-    if not IS_MACOS:
-        logger.warning("Attempted to run AppleScript on non-macOS platform")
-        return False
-    
-    try:
-        subprocess.run(['osascript', '-e', script], check=True, capture_output=True)
+        # Get the shared NSApplication instance
+        ns_app = AppKit.NSApplication.sharedApplication()
+        
+        # Create a proper app menu
+        menubar = AppKit.NSMenu.alloc().init()
+        app_menu_item = AppKit.NSMenuItem.alloc().init()
+        menubar.addItem_(app_menu_item)
+        
+        app_menu = AppKit.NSMenu.alloc().init()
+        
+        # Create Quit menu item with proper target/action
+        quit_title = "Quit"
+        quit_menu_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            quit_title, 'terminate:', 'q'
+        )
+        app_menu.addItem_(quit_menu_item)
+        
+        # Add menu to menubar
+        app_menu_item.setSubmenu_(app_menu)
+        ns_app.setMainMenu_(menubar)
+        
+        # Create a custom application delegate
+        global _app_delegate
+        
+        class CustomAppDelegate(AppKit.NSObject):
+            def applicationShouldTerminateAfterLastWindowClosed_(self, sender):
+                return False
+                
+            def applicationWillTerminate_(self, notification):
+                logger.info("macOS: Application will terminate")
+                
+            def applicationShouldTerminate_(self, sender):
+                logger.info("macOS: Application should terminate")
+                # Important: Schedule the app to quit properly via Qt
+                QCoreApplication.instance().quit()
+                return AppKit.NSTerminateCancel  # Let Qt handle the quit
+                
+            # Add support for dock menu
+            def applicationDockMenu_(self, sender):
+                dock_menu = AppKit.NSMenu.alloc().init()
+                
+                # Add a direct Quit item to dock menu
+                quit_title = "Quit"
+                quit_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                    quit_title, 'terminate:', ''
+                )
+                dock_menu.addItem_(quit_item)
+                
+                return dock_menu
+        
+        # Create and set the delegate
+        _app_delegate = CustomAppDelegate.alloc().init()
+        ns_app.setDelegate_(_app_delegate)
+        
+        # Make app activatable
+        ns_app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyRegular)
+        
+        logger.info("macOS application customization complete")
         return True
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Failed to run AppleScript: {e}")
-        if e.stderr:
-            logger.error(f"Error output: {e.stderr.decode('utf-8')}")
+        
+    except ImportError as e:
+        logger.error(f"Failed to import required modules for macOS integration: {e}")
         return False
     except Exception as e:
-        logger.error(f"Unexpected error running AppleScript: {e}")
+        logger.error(f"Error setting up macOS application: {e}")
         return False
 
-def hide_dock_icon():
-    """Hide the app icon from the dock"""
-    if not IS_MACOS:
-        logger.info("Not on macOS - dock icon functions are no-ops")
-        return
-    
-    # Method 1: Use PyObjC/AppKit if available
-    if using_pyobjc:
-        try:
-            NSApp.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
-            logger.info("Dock icon hidden using PyObjC/AppKit")
-            return
-        except Exception as e:
-            logger.error(f"Failed to hide dock icon with PyObjC: {e} - trying fallback")
-    
-    # Method 2: Use AppleScript as fallback
-    app_name = os.path.basename(sys.executable)
-    if _run_osascript(f'tell application "System Events" to set visible of process "{app_name}" to false'):
-        logger.info(f"Dock icon hidden using AppleScript fallback for {app_name}")
-    else:
-        logger.warning("Failed to hide dock icon using all available methods")
-
 def show_dock_icon():
-    """Show the app icon in the dock"""
-    if not IS_MACOS:
-        logger.info("Not on macOS - dock icon functions are no-ops")
+    """Show the dock icon on macOS"""
+    global _dock_icon_visible
+    
+    if _dock_icon_visible:
         return
+        
+    if platform.system() != 'Darwin':
+        return
+        
+    try:
+        import objc
+        import AppKit
+        
+        # Get the shared NSApplication instance
+        app = AppKit.NSApplication.sharedApplication()
+        
+        # Remove the 'LSUIElement' activation policy to show the dock icon
+        app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyRegular)
+        
+        _dock_icon_visible = True
+        logger.info("Dock icon shown using PyObjC/AppKit")
+    except ImportError:
+        logger.warning("Failed to import PyObjC/AppKit for showing dock icon")
+    except Exception as e:
+        logger.error(f"Error showing dock icon: {e}")
+
+def hide_dock_icon():
+    """Hide the dock icon on macOS"""
+    global _dock_icon_visible
     
-    # Method 1: Use PyObjC/AppKit if available
-    if using_pyobjc:
+    if not _dock_icon_visible:
+        return
+        
+    if platform.system() != 'Darwin':
+        return
+        
+    try:
+        import objc
+        import AppKit
+        
+        # Get the shared NSApplication instance
+        app = AppKit.NSApplication.sharedApplication()
+        
+        # Set the 'LSUIElement' activation policy to hide the dock icon
+        app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)
+        
+        _dock_icon_visible = False
+        logger.info("Dock icon hidden using PyObjC/AppKit")
+    except ImportError:
+        logger.warning("Failed to import PyObjC/AppKit for hiding dock icon")
+    except Exception as e:
+        logger.error(f"Error hiding dock icon: {e}")
+
+def force_quit_application():
+    """Force quit the application using macOS API"""
+    if platform.system() == 'Darwin':
         try:
-            NSApp.setActivationPolicy_(NSApplicationActivationPolicyRegular)
-            logger.info("Dock icon shown using PyObjC/AppKit")
-            return
+            import objc
+            import AppKit
+            logger.info("Forcing application termination via macOS API")
+            AppKit.NSApplication.sharedApplication().terminate_(None)
+            return True
         except Exception as e:
-            logger.error(f"Failed to show dock icon with PyObjC: {e} - trying fallback")
+            logger.error(f"Failed to force quit: {e}")
     
-    # Method 2: Use AppleScript as fallback
-    app_name = os.path.basename(sys.executable)
-    if _run_osascript(f'tell application "System Events" to set visible of process "{app_name}" to true'):
-        logger.info(f"Dock icon shown using AppleScript fallback for {app_name}")
-    else:
-        logger.warning("Failed to show dock icon using all available methods")
+    # Fallback to sys.exit(0)
+    sys.exit(0)
+    return False

@@ -1,35 +1,59 @@
-from gui.main_window import MainWindow
-from core.scheduler import start_scheduler, get_scheduler_status
-from PyQt6.QtWidgets import QApplication
 import sys
 import logging
 import faulthandler
 import platform
+import os
+import gc
 
 # Enable faulthandler to get better crash reports
 faulthandler.enable()
 
-# Setup logging
+# Setup logging early, before any imports
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("main")
 
-# Try to pre-load PyObjC on macOS to avoid issues with dock icon management
-if platform.system() == 'Darwin':
-    try:
-        import objc
-        import AppKit
-        logger.info("Successfully pre-loaded PyObjC and AppKit")
-    except ImportError:
-        logger.warning("Unable to import PyObjC/AppKit - dock icon management may not work correctly")
+# Import and use our Qt initialization module
+from core.qt_init import setup_qt_env, import_qt_modules
+
+# Set up the Qt environment before any PyQt imports
+setup_qt_env()
+
+# Import modules in controlled order after environment is set up
+qt_modules = import_qt_modules()
+QApplication = qt_modules['QApplication']
+Qt = qt_modules['Qt']
+
+# Now safe to import the rest
+from gui.main_window import MainWindow
+from core.scheduler import start_scheduler, get_scheduler_status
 
 def main():
+    # Create application instance
     app = QApplication(sys.argv)
     
-    # Create and show the main window
+    # Configure application shutdown behavior
+    app.setQuitOnLastWindowClosed(False)
+    
+    # Set up macOS specific handling
+    if platform.system() == 'Darwin':
+        try:
+            from utils.macos_utils import setup_macos_app
+            if setup_macos_app():
+                logger.info("macOS app customization successful")
+            else:
+                logger.warning("macOS app customization failed, using fallback")
+        except ImportError:
+            logger.warning("Could not import macOS utilities, using standard configuration")
+    
+    # Ensure app can exit properly when quit is requested
+    app.aboutToQuit.connect(lambda: logger.info("Application is about to quit"))
+    
+    # Create main window
+    logger.info("Creating main window...")
     main_window = MainWindow()
     main_window.show()
     
-    # Start the scheduler for periodic tasks
+    # Start the scheduler for periodic tasks after UI is initialized
     logger.info("Starting scheduler...")
     scheduler_thread = start_scheduler()
     
@@ -50,8 +74,12 @@ def main():
     else:
         logger.warning("Scheduler thread may not be running properly")
     
-    # Run the application
-    sys.exit(app.exec())
+    # Run the application event loop
+    exit_code = app.exec()
+    
+    # Clean up resources before exit
+    logger.info(f"Application exiting with code {exit_code}")
+    sys.exit(exit_code)
 
 if __name__ == "__main__":
     main()

@@ -7,45 +7,46 @@ from pathlib import Path
 from .task_status import TaskState, TaskStatus
 from .log_manager import LogManager
 
+# Global instance reference - moved outside the class to avoid metaclass recursion
+_status_manager_instance = None
+
 class StatusManager(QObject):
-    # 定义信号（必须在类级别定义）
+    # Define signals (must be at class level)
     status_updated = pyqtSignal(TaskState)
     task_queue_updated = pyqtSignal(list)
     
-    # 单例实例
-    _instance = None
-    _initialized = False
+    # Modified singleton implementation to avoid metaclass recursion issues
+    @staticmethod
+    def instance():
+        global _status_manager_instance
+        if _status_manager_instance is None:
+            _status_manager_instance = StatusManager(create_singleton=True)
+        return _status_manager_instance
     
-    def __new__(cls):
-        if cls._instance is None:
-            # 首先创建基本实例，但不初始化
-            cls._instance = super(StatusManager, cls).__new__(cls)
-        return cls._instance
-    
-    @classmethod
-    def instance(cls):
-        if cls._instance is None:
-            return StatusManager()
-        return cls._instance
-    
-    def __init__(self):
-        # 确保初始化只执行一次
-        if self._initialized:
-            return
-            
-        # 先调用 QObject 的初始化
+    def __init__(self, create_singleton=False):
+        # Always initialize the QObject properly
         super().__init__()
         
-        # 创建实例属性
+        # Create instance attributes
         self._active_tasks = {}
-        self._task_queue = deque(maxlen=100)  # 保留最近100个任务的状态
+        self._task_queue = deque(maxlen=100)
         self._log_manager = LogManager()
         
-        # 标记初始化完成
-        self._initialized = True
+        # Only proceed with full initialization if this is not the singleton instance
+        # and a singleton already exists
+        global _status_manager_instance
+        if not create_singleton and _status_manager_instance is not None:
+            # Instead of copying attributes (which can cause references to be lost),
+            # make this instance redirect to the singleton for all operations
+            return
+            
+        # Only set the global instance if we're explicitly creating the singleton
+        # or if no singleton exists yet
+        if create_singleton or _status_manager_instance is None:
+            _status_manager_instance = self
             
     def create_task(self, name: str) -> str:
-        """创建新任务并返回任务ID"""
+        """Create a new task and return its ID"""
         task_id = str(uuid.uuid4())
         task_state = TaskState(
             task_id=task_id,
@@ -62,7 +63,7 @@ class StatusManager(QObject):
                     progress: Optional[int] = None,
                     message: Optional[str] = None,
                     error: Optional[str] = None):
-        """更新任务状态"""
+        """Update task status"""
         if task_id not in self._active_tasks:
             return
             
@@ -84,7 +85,7 @@ class StatusManager(QObject):
         if error:
             task.error = error
             
-        # 记录日志
+        # Log the event
         self._log_manager.log_task_event(task)
         
         self.status_updated.emit(task)
@@ -94,13 +95,13 @@ class StatusManager(QObject):
             self._active_tasks.pop(task_id, None)
             
     def get_task_state(self, task_id: str) -> Optional[TaskState]:
-        """获取任务状态"""
+        """Get task state"""
         return self._active_tasks.get(task_id)
         
     def get_task_queue(self) -> List[TaskState]:
-        """获取任务队列"""
+        """Get task queue"""
         return list(self._task_queue)
         
     def get_latest_log_file(self) -> Optional[Path]:
-        """获取最新日志文件路径"""
+        """Get the latest log file path"""
         return self._log_manager.get_latest_log_file()

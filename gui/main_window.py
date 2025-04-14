@@ -231,3 +231,28 @@ class MainWindow(QMainWindow):
         else:
             # 真正退出
             event.accept()
+    
+    def exit_application(self):
+        """Properly exit the application"""
+        import logging
+        import platform
+        import sys
+        from PyQt6.QtCore import QCoreApplication
+        
+        logger = logging.getLogger(__name__)
+        logger.info("Exit application requested")
+        
+        # Try platform-specific exit if available
+        if platform.system() == 'Darwin':
+            try:
+                from utils.macos_utils import force_quit_application
+                if force_quit_application():
+                    return
+            except ImportError:
+                pass
+        
+        # Force application to quit using Qt
+        QCoreApplication.instance().quit()
+        
+        # If we get here, force exit with sys.exit
+        sys.exit(0)
