@@ -11,7 +11,7 @@ from PyQt6.QtCore import QCoreApplication
 logger = logging.getLogger(__name__)
 
 # Track dock icon state to prevent redundant operations
-_dock_icon_visible = False
+_dock_icon_visible = True  # Initialize to True since dock icon is visible when app starts
 _app_delegate = None
 
 def setup_macos_app():
@@ -122,12 +122,9 @@ def hide_dock_icon():
     """Hide the dock icon on macOS"""
     global _dock_icon_visible
     
-    if not _dock_icon_visible:
-        return
-        
     if platform.system() != 'Darwin':
         return
-        
+    
     try:
         import objc
         import AppKit
