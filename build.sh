@@ -43,10 +43,31 @@ if [ $? -eq 0 ]; then
     codesign --deep --force --sign - "Release/dist/NeuroFeedApp.app"
     
     if [ $? -eq 0 ]; then
-        echo "App signed successfully. Ready for limited distribution."
-        echo "The app is located in Release/dist folder."
+        echo "App signed successfully."
+        
+        # Create disk image for easy distribution
+        echo "Creating disk image for distribution..."
+        hdiutil create -volname "NeuroFeedApp" -srcfolder "Release/dist/NeuroFeedApp.app" -ov -format UDZO "Release/dist/NeuroFeedApp.dmg"
+        
+        if [ $? -eq 0 ]; then
+            echo "Disk image created successfully at Release/dist/NeuroFeedApp.dmg"
+            echo ""
+            echo "=================================================="
+            echo "IMPORTANT INSTRUCTIONS FOR RECIPIENTS:"
+            echo "=================================================="
+            echo "When opening the app for the first time:"
+            echo "1. Right-click (or Control+click) on the app"
+            echo "2. Select 'Open' from the menu"
+            echo "3. Click 'Open' in the dialog that appears"
+            echo ""
+            echo "Alternatively, they can run this in Terminal:"
+            echo "sudo xattr -rd com.apple.quarantine /path/to/NeuroFeedApp.app"
+            echo "=================================================="
+        else
+            echo "Failed to create disk image."
+        fi
     else
-        echo "Warning: App signing failed. The app will still work but may trigger security warnings."
+        echo "Warning: App signing failed. The app will trigger security warnings."
     fi
 else
     echo "Build failed. Please check the error messages above."
