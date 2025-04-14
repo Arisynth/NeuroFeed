@@ -36,7 +36,18 @@ pyinstaller main.py \
 
 # Check if build completed successfully
 if [ $? -eq 0 ]; then
-    echo "Build completed successfully! The app is located in Release/dist folder."
+    echo "Build completed successfully!"
+    
+    # Ad-hoc signing for limited distribution
+    echo "Performing ad-hoc signing..."
+    codesign --deep --force --sign - "Release/dist/NeuroFeedApp.app"
+    
+    if [ $? -eq 0 ]; then
+        echo "App signed successfully. Ready for limited distribution."
+        echo "The app is located in Release/dist folder."
+    else
+        echo "Warning: App signing failed. The app will still work but may trigger security warnings."
+    fi
 else
     echo "Build failed. Please check the error messages above."
     exit 1
