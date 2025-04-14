@@ -8,31 +8,41 @@ from .task_status import TaskState, TaskStatus
 from .log_manager import LogManager
 
 class StatusManager(QObject):
-    # 定义信号
+    # 定义信号（必须在类级别定义）
     status_updated = pyqtSignal(TaskState)
     task_queue_updated = pyqtSignal(list)
     
+    # 单例实例
     _instance = None
+    _initialized = False
+    
+    def __new__(cls):
+        if cls._instance is None:
+            # 首先创建基本实例，但不初始化
+            cls._instance = super(StatusManager, cls).__new__(cls)
+        return cls._instance
     
     @classmethod
     def instance(cls):
         if cls._instance is None:
-            cls._instance = StatusManager()
+            return StatusManager()
         return cls._instance
     
     def __init__(self):
-        # 防止多次初始化 QObject
-        if StatusManager._instance is not None:
+        # 确保初始化只执行一次
+        if self._initialized:
             return
-        
-        # 确保只有第一个实例初始化父类
+            
+        # 先调用 QObject 的初始化
         super().__init__()
+        
+        # 创建实例属性
         self._active_tasks = {}
         self._task_queue = deque(maxlen=100)  # 保留最近100个任务的状态
         self._log_manager = LogManager()
         
-        # 将自身设置为单例实例
-        StatusManager._instance = self
+        # 标记初始化完成
+        self._initialized = True
             
     def create_task(self, name: str) -> str:
         """创建新任务并返回任务ID"""

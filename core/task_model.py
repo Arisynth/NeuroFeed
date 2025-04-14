@@ -19,10 +19,14 @@ class Task:
         
         # Feed-specific configuration
         self.feed_config = feed_config or {}  # Format: {"feed_url": {"items_count": 10}}
+        
+        # Template-related attributes
+        self.is_template = False
+        self.derived_from_template_id = None
     
     def to_dict(self):
         """Convert task to dictionary for storage"""
-        return {
+        task_dict = {
             "id": self.task_id,
             "name": self.name,
             "rss_feeds": self.rss_feeds,
@@ -34,6 +38,13 @@ class Task:
             "last_run": self.last_run,
             "feed_config": self.feed_config
         }
+        
+        if hasattr(self, 'is_template') and self.is_template:
+            task_dict['is_template'] = True
+        if hasattr(self, 'derived_from_template_id') and self.derived_from_template_id:
+            task_dict['derived_from_template_id'] = self.derived_from_template_id
+        
+        return task_dict
     
     @classmethod
     def from_dict(cls, data):

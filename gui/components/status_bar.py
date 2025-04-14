@@ -52,9 +52,18 @@ class CustomStatusBar(QStatusBar):
         # 连接日志按钮
         self.log_button.clicked.connect(self._open_log_file)
         
-        # 连接状态管理器 - 使用更安全的实例获取方法
-        self.status_manager = StatusManager.instance()
-        self.status_manager.status_updated.connect(self.update_status)
+        # 连接状态管理器 - 确保完全初始化
+        self.status_manager = StatusManager()  # 使用构造函数强制初始化
+        
+        # 在QTimer中延迟连接信号，确保状态管理器已完全初始化
+        QTimer.singleShot(0, self._connect_signals)
+    
+    def _connect_signals(self):
+        """连接状态管理器的信号 - 解决初始化顺序问题"""
+        try:
+            self.status_manager.status_updated.connect(self.update_status)
+        except Exception as e:
+            print(f"Error connecting to status_manager signals: {e}")
     
     def _update_animation(self):
         """更新加载动画"""

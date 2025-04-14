@@ -24,9 +24,26 @@ def initialize_config():
     # Check if config file exists
     if not os.path.exists(CONFIG_PATH):
         if os.path.exists(TEMPLATE_PATH):
-            # Copy template to actual config file
-            shutil.copy(TEMPLATE_PATH, CONFIG_PATH)
-            logger.info(f"Created initial configuration from template")
+            # Load template to mark example tasks
+            try:
+                with open(TEMPLATE_PATH, 'r', encoding='utf-8') as f:
+                    template_config = json.load(f)
+                    # Mark all template tasks as examples
+                    for task in template_config.get("tasks", []):
+                        task["is_template"] = True
+                        # Ensure each template task has an ID for later identification
+                        if "id" not in task:
+                            task["id"] = str(uuid.uuid4())
+                
+                # Save the modified template as the config
+                with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+                    json.dump(template_config, f, indent=4, ensure_ascii=False)
+                logger.info(f"Created initial configuration from template with marked example tasks")
+            except Exception as e:
+                logger.error(f"Error processing template: {e}")
+                # Fallback to direct copy if processing fails
+                shutil.copy(TEMPLATE_PATH, CONFIG_PATH)
+                logger.info(f"Created initial configuration from template (direct copy)")
         else:
             # Create a minimal default config
             default_config = {
@@ -53,7 +70,7 @@ def initialize_config():
                         "show_notifications": True,
                         "skip_processed_articles": True,
                         "language": "en",
-                        "db_retention_days": 30  # Add default db retention days
+                        "db_retention_days": 30
                     },
                     "user_interests": []
                 }
@@ -91,7 +108,7 @@ def load_config():
                 "show_notifications": True,
                 "skip_processed_articles": False,
                 "language": "en",
-                "db_retention_days": 30  # Add default db retention days
+                "db_retention_days": 30
             },
             "user_interests": []
         }
@@ -166,7 +183,14 @@ def get_tasks():
     """Get list of all tasks from config"""
     config = load_config()
     from core.task_model import Task
-    return [Task.from_dict(task_dict) for task_dict in config.get("tasks", [])]
+    tasks = []
+    for task_dict in config.get("tasks", []):
+        task = Task.from_dict(task_dict)
+        # If this is a template task, mark it for the UI
+        if task_dict.get("is_template", False):
+            task.is_template = True
+        tasks.append(task)
+    return tasks
 
 def save_task(task):
     """Save a task to config"""
@@ -180,14 +204,35 @@ def save_task(task):
     tasks = config.get("tasks", [])
     updated = False
     
+    # First, check if this is a modified template task
+    template_task_idx = None
     for i, existing_task in enumerate(tasks):
+        # If this task came from a template task that's being edited
+        if task.derived_from_template_id and existing_task.get("id") == task.derived_from_template_id:
+            template_task_idx = i
+        
+        # Regular task update check
         if existing_task.get("id") == task.task_id:
             tasks[i] = task.to_dict()
+            # Make sure we're not marking non-template tasks as templates
+            if "is_template" in tasks[i] and not task.is_template:
+                del tasks[i]["is_template"]
             updated = True
             break
     
+    # If we found a template task that was modified, remove it
+    if template_task_idx is not None and not updated:
+        logger.info(f"Removing template task that was modified")
+        # Remove template task
+        del tasks[template_task_idx]
+    
+    # Add task if not an update
     if not updated:
-        tasks.append(task.to_dict())
+        task_dict = task.to_dict()
+        # Ensure we're not carrying over the derived_from_template_id field
+        if hasattr(task, 'derived_from_template_id'):
+            task_dict.pop('derived_from_template_id', None)
+        tasks.append(task_dict)
     
     config["tasks"] = tasks
     save_config(config)
