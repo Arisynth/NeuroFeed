@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (QDialog, QTabWidget, QVBoxLayout, QHBoxLayout, QLab
                             QLineEdit, QCheckBox, QComboBox, QPushButton, QFormLayout, 
                             QGroupBox, QWidget, QMessageBox, QSpinBox, QStackedWidget)
 from PyQt6.QtCore import Qt, QTimer
-from core.config_manager import load_config, save_config, get_general_settings, update_general_settings
+from core.config_manager import load_config, save_config, get_general_settings, update_general_settings, CONFIG_PATH  # Import CONFIG_PATH
 import requests
 import json
 from gui.tag_editor import TagEditor  # 导入标签编辑器
@@ -16,13 +16,21 @@ class SettingsWindow(QDialog):
         self.setWindowTitle(get_text("settings"))
         self.setMinimumSize(500, 400)
         
-        # 添加样式表确保下拉列表字体一致
+        # 添加样式表确保下拉列表字体一致，添加复选框样式修正
         self.setStyleSheet("""
             QComboBox {
                 font-size: 12px;
             }
             QComboBox QAbstractItemView {
                 font-size: 12px;
+            }
+            QCheckBox {
+                background: transparent;
+                border: none;
+            }
+            QCheckBox:focus {
+                background: transparent;
+                border: none;
             }
         """)
         
@@ -415,24 +423,29 @@ class SettingsWindow(QDialog):
         
         self.start_on_boot = QCheckBox(get_text("start_on_boot"))
         self.start_on_boot.setChecked(general_settings.get("start_on_boot", False))
+        # 确保复选框不自动获取焦点
+        self.start_on_boot.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         
         self.minimize_to_tray = QCheckBox(get_text("minimize_to_tray"))
         self.minimize_to_tray.setChecked(general_settings.get("minimize_to_tray", True))
+        self.minimize_to_tray.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         
         self.show_notifications = QCheckBox(get_text("show_notifications"))
         self.show_notifications.setChecked(general_settings.get("show_notifications", True))
+        self.show_notifications.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         
         behavior_form.addRow("", self.start_on_boot)
         behavior_form.addRow("", self.minimize_to_tray)
         behavior_form.addRow("", self.show_notifications)
         
-        # 创建临时测试开关 - 跳过已处理文章
+        # 创建跳过已处理文章选项 - 移除测试功能标记
         self.skip_processed_checkbox = QCheckBox(get_text("skip_processed"))
         self.skip_processed_checkbox.setChecked(general_settings.get("skip_processed_articles", False))
         self.skip_processed_checkbox.setToolTip(get_text("skip_processed_tooltip"))
+        self.skip_processed_checkbox.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         
-        # 添加测试开关到布局中
-        behavior_form.addRow(f"{get_text('test_feature')}:", self.skip_processed_checkbox)
+        # 添加选项到布局中 - 不再标识为测试功能
+        behavior_form.addRow("", self.skip_processed_checkbox)
         
         # 添加语言选择下拉菜单
         language_layout = QHBoxLayout()
