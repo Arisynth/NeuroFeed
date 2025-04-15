@@ -27,6 +27,15 @@ class TaskManager(QWidget):
         
         self.task_selector = QComboBox()
         self.task_selector.currentIndexChanged.connect(self.on_task_changed)
+        # 确保下拉列表的字体大小一致
+        self.task_selector.setStyleSheet("""
+            QComboBox {
+                font-size: 12px;
+            }
+            QComboBox QAbstractItemView {
+                font-size: 12px;
+            }
+        """)
         # Reduce width of task selector to make room for buttons
         task_selection_layout.addWidget(self.task_selector, 1)
         

@@ -41,6 +41,16 @@ class MainWindow(QMainWindow):
         icon_path = get_resource_path("resources/icon.png")
         self.setWindowIcon(QIcon(icon_path))
         
+        # 添加全局样式表，确保字体一致性
+        self.setStyleSheet("""
+            QComboBox {
+                font-size: 12px;
+            }
+            QComboBox QAbstractItemView {
+                font-size: 12px;
+            }
+        """)
+        
         # 添加托盘图标和控制是否真正退出的标志
         self.really_quit = False
         self.tray_icon = TrayIcon(self)

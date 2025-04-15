@@ -16,6 +16,16 @@ class SettingsWindow(QDialog):
         self.setWindowTitle(get_text("settings"))
         self.setMinimumSize(500, 400)
         
+        # 添加样式表确保下拉列表字体一致
+        self.setStyleSheet("""
+            QComboBox {
+                font-size: 12px;
+            }
+            QComboBox QAbstractItemView {
+                font-size: 12px;
+            }
+        """)
+        
         # 记录原始配置用于检测更改
         self.config = load_config()
         self.original_config = self._get_serializable_config(self.config)
