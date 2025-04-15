@@ -82,11 +82,11 @@ class CustomStatusBar(QStatusBar):
             logger.info("Successfully connected to status manager signals")
             
             # Test the connection by updating our own status
-            test_task_id = self.status_manager.create_task("状态栏测试")
+            test_task_id = self.status_manager.create_task(get_text("status_bar_test"))
             self.status_manager.update_task(
                 test_task_id, 
                 status=TaskStatus.COMPLETED,
-                message="已就绪"
+                message=get_text("ready")
             )
             logger.info(f"Sent test signal with task ID: {test_task_id}")
             

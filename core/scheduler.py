@@ -3,7 +3,7 @@ import time
 import threading
 import logging
 import queue
-import sys  # Add the missing sys import
+import sys
 from datetime import datetime, timedelta
 from core.config_manager import load_config, save_config, get_tasks, save_task
 from core.rss_parser import RssParser
@@ -15,6 +15,7 @@ from .news_db_manager import NewsDBManager
 from .log_manager import LogManager
 from core.status_manager import StatusManager
 from core.task_status import TaskStatus
+from core.localization import get_text
 
 # 替换现有的日志设置
 log_manager = LogManager()
@@ -68,7 +69,7 @@ def process_task_queue():
                     status_manager.update_task(
                         task_id,
                         status=TaskStatus.FAILED,
-                        message=f"任务执行失败: {str(e)}",
+                        message=get_text("task_error"),
                         error=str(e)
                     )
                 except Exception as status_error:
@@ -147,14 +148,14 @@ def _execute_task(task_id=None):
         task_state_id = _task_status_map[task_id]
         logger.info(f"使用已有的状态任务ID: {task_state_id} 用于任务 {task_id}")
     else:
-        task_state_id = status_manager.create_task("RSS处理任务")
+        task_state_id = status_manager.create_task(get_text("rss_feeds"))
         logger.info(f"创建新的状态任务ID: {task_state_id}")
         if task_id:
             _task_status_map[task_id] = task_state_id
     
     status_manager.update_task(task_state_id, 
                              status=TaskStatus.RUNNING,
-                             message="正在加载任务配置...")
+                             message=get_text("loading_task_config") if get_text("loading_task_config") != "loading_task_config" else "正在加载任务配置...")
     
     # 加载配置和任务
     config = load_config()
@@ -199,7 +200,7 @@ def _execute_task(task_id=None):
             return
     
     # 初始化RSS解析器、内容过滤器和摘要生成器
-    status_manager.update_task(task_state_id, message="正在初始化服务...")
+    status_manager.update_task(task_state_id, message=get_text("initializing_services") if get_text("initializing_services") != "initializing_services" else "正在初始化服务...")
     rss_parser = RssParser()
     # 确保使用最新配置
     is_skipping = rss_parser.refresh_settings()
@@ -305,7 +306,7 @@ def _execute_task(task_id=None):
             logger.info(f"总条目数: {total_items}")
             
             # 收集所有内容
-            status_manager.update_task(task_state_id, message=f"正在获取RSS内容...")
+            status_manager.update_task(task_state_id, message=get_text("fetching_rss_content") if get_text("fetching_rss_content") != "fetching_rss_content" else "正在获取RSS内容...")
             all_contents = []
             logger.info(f"\n============ 整合内容 ============")
             for feed_url, result in feed_results.items():
@@ -337,13 +338,13 @@ def _execute_task(task_id=None):
             
             # RSS获取完成后更新进度
             status_manager.update_task(task_state_id, 
-                                     message=f"正在进行AI内容过滤...",
+                                     message=get_text("ai_content_filtering") if get_text("ai_content_filtering") != "ai_content_filtering" else "正在进行AI内容过滤...",
                                      progress=int(current_progress + 30))
             
             try:
                 kept_contents, discarded_contents = content_filter.filter_content_batch(all_contents)
                 status_manager.update_task(task_state_id,
-                                         message=f"正在生成内容摘要...",
+                                         message=get_text("generating_content_summary") if get_text("generating_content_summary") != "generating_content_summary" else "正在生成内容摘要...",
                                          progress=int(current_progress + 60))
                 
                 # 标记丢弃的内容为已处理 - 使用新的任务特定标记
@@ -427,7 +428,7 @@ def _execute_task(task_id=None):
             # 如果有收件人，则发送邮件
             if kept_contents and task.recipients:
                 status_manager.update_task(task_state_id,
-                                         message=f"正在发送邮件...",
+                                         message=get_text("sending_emails") if get_text("sending_emails") != "sending_emails" else "正在发送邮件...",
                                          progress=int(current_progress + 80))
                 
                 logger.info(f"\n============ 开始发送邮件 ============")
@@ -496,7 +497,7 @@ def _execute_task(task_id=None):
     status_manager.update_task(task_state_id,
                              status=TaskStatus.COMPLETED,
                              progress=100,
-                             message="所有任务执行完成")
+                             message=get_text("all_tasks_completed") if get_text("all_tasks_completed") != "all_tasks_completed" else "所有任务执行完成")
     
     logger.info(f"\n=====================================================")
     logger.info(f"所有任务执行完成")
@@ -698,13 +699,14 @@ def run_task_now(task_id):
     
     # 获取状态管理器，创建任务状态
     status_manager = StatusManager.instance()
-    status_task_id = status_manager.create_task(f"执行任务 {task_id}")
+    task_name = get_text("execute_task") if get_text("execute_task") != "execute_task" else f"执行任务 {task_id}"
+    status_task_id = status_manager.create_task(task_name)
     logger.info(f"创建状态任务ID: {status_task_id} 用于追踪任务 {task_id} 的执行")
     
     status_manager.update_task(
         status_task_id,
         status=TaskStatus.PENDING,
-        message="任务已加入队列，等待执行..."
+        message=get_text("task_queued") if get_text("task_queued") != "task_queued" else "任务已加入队列，等待执行..."
     )
     
     # Store the status_task_id in a global dictionary to track it during execution

@@ -138,6 +138,17 @@ For the full article, please click the "Read Original" link.""",
         "time_format_hours": "{} hours, {} minutes from now",
         "time_format_minutes": "{} minutes from now",
         
+        # Scheduler process translations
+        "loading_task_config": "Loading task configuration...",
+        "initializing_services": "Initializing services...",
+        "fetching_rss_content": "Fetching RSS content...",
+        "ai_content_filtering": "Performing AI content filtering...",
+        "generating_content_summary": "Generating content summaries...",
+        "sending_emails": "Sending emails...",
+        "all_tasks_completed": "All tasks completed",
+        "execute_task": "Execute task",
+        "task_queued": "Task queued, waiting for execution...",
+        
         # Messages
         "settings_saved": "Settings saved!",
         "restart_required": "The language setting has been changed. Please restart the application for the changes to take effect.",
@@ -276,6 +287,8 @@ For the full article, please click the "Read Original" link.""",
         "ready": "Ready",
         "error_opening_log": "Failed to open log file",
         "no_log_file": "No log file available",
+        "log_file_not_found": "Log file not found",
+        "status_bar_test": "Status bar test",
         
         # Add version-related translations
         "version": "Version",
@@ -406,6 +419,17 @@ For the full article, please click the "Read Original" link.""",
         "time_format_days": "{}天{}小时{}分钟后",
         "time_format_hours": "{}小时{}分钟后",
         "time_format_minutes": "{}分钟后",
+        
+        # Scheduler process translations
+        "loading_task_config": "正在加载任务配置...",
+        "initializing_services": "正在初始化服务...",
+        "fetching_rss_content": "正在获取RSS内容...",
+        "ai_content_filtering": "正在进行AI内容过滤...",
+        "generating_content_summary": "正在生成内容摘要...",
+        "sending_emails": "正在发送邮件...",
+        "all_tasks_completed": "所有任务执行完成",
+        "execute_task": "执行任务",
+        "task_queued": "任务已加入队列，等待执行...",
         
         # Messages
         "settings_saved": "设置已保存！",
@@ -545,6 +569,8 @@ For the full article, please click the "Read Original" link.""",
         "ready": "准备就绪",
         "error_opening_log": "打开日志文件失败",
         "no_log_file": "暂无可用的日志文件",
+        "log_file_not_found": "找不到日志文件",
+        "status_bar_test": "状态栏测试",
         
         # Add version-related translations
         "version": "版本",
