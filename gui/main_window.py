@@ -45,6 +45,9 @@ class MainWindow(QMainWindow):
         self.really_quit = False
         self.tray_icon = TrayIcon(self)
         
+        # 初始化状态管理器 - 在其他组件创建之前初始化
+        self.status_manager = StatusManager.instance()
+        
         # Create central widget and main layout
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -101,9 +104,6 @@ class MainWindow(QMainWindow):
         if self.task_manager.current_task:
             self.on_task_changed(self.task_manager.current_task)
         
-        # 初始化状态显示 - 使用更安全的实例获取方法
-        self.status_manager = StatusManager.instance()
-        
         # 显示初始状态
         initial_task_id = self.status_manager.create_task("系统状态")
         self.status_manager.update_task(
@@ -142,10 +142,13 @@ class MainWindow(QMainWindow):
         # 首先保存最新的任务状态到配置文件
         save_task(task)
         
-        # 向用户显示任务已经开始的提示
-        QMessageBox.information(self, get_text("task_started"), 
-                              f"{get_text('task_started_message')} '{task.name}'\n\n"
-                              f"{get_text('task_started_note')}")
+        # 创建一个初始状态更新，这样即使在任务进入队列前也有状态显示
+        status_task_id = self.status_manager.create_task(f"执行任务: {task.name}")
+        self.status_manager.update_task(
+            status_task_id,
+            status=TaskStatus.PENDING,
+            message=f"准备执行任务: {task.name}..."
+        )
         
         try:
             # 记录任务ID用于调试
@@ -153,7 +156,17 @@ class MainWindow(QMainWindow):
             print(f"Running task with ID: {task_id}")
             
             # 调用scheduler中的方法立即执行任务
-            run_task_now(task_id)
+            task_result = run_task_now(task_id)
+            
+            # 如果返回了状态任务ID，可以用于后续跟踪
+            if isinstance(task_result, dict) and 'status_task_id' in task_result:
+                status_task_id = task_result['status_task_id']
+                print(f"Task queued with status tracking ID: {status_task_id}")
+            
+            # 向用户显示任务已经开始的提示
+            QMessageBox.information(self, get_text("task_started"), 
+                                  f"{get_text('task_started_message')} '{task.name}'\n\n"
+                                  f"{get_text('task_started_note')}")
             
             # 由于任务在后台线程执行，这里只更新UI状态
             task.update_task_run()
@@ -162,11 +175,25 @@ class MainWindow(QMainWindow):
             # 立即更新调度器UI以显示最新的运行时间和下次运行时间
             self.scheduler_manager.update_scheduler_ui()
             
-            # 删除延时更新的代码，任务一旦开始，就已经知道下次何时运行了
+            # 确保状态栏显示已经开始的任务状态
+            self.status_manager.update_task(
+                status_task_id,
+                status=TaskStatus.RUNNING,
+                message=f"正在执行任务: {task.name}...",
+                progress=5
+            )
+            
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
             print(f"任务执行错误: {error_details}")
+            # 更新状态管理器以显示错误
+            self.status_manager.update_task(
+                status_task_id,
+                status=TaskStatus.FAILED,
+                message=f"任务执行失败: {str(e)}",
+                error=str(e)
+            )
             QMessageBox.critical(self, get_text("task_error"), 
                                f"{get_text('error_starting_task')}: {str(e)}")
         finally:

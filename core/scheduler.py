@@ -3,6 +3,7 @@ import time
 import threading
 import logging
 import queue
+import sys  # Add the missing sys import
 from datetime import datetime, timedelta
 from core.config_manager import load_config, save_config, get_tasks, save_task
 from core.rss_parser import RssParser
@@ -121,8 +122,23 @@ def _execute_task(task_id=None):
     logger.info(f"=====================================================\n")
     
     # 获取状态管理器实例
-    status_manager = StatusManager()
-    task_state_id = status_manager.create_task("RSS处理任务")
+    status_manager = StatusManager.instance()
+    
+    # Check if we have a status task ID for this task
+    global _task_status_map
+    if not hasattr(sys.modules[__name__], '_task_status_map'):
+        _task_status_map = {}
+    
+    # Use existing status task ID if available, otherwise create a new one
+    if task_id and task_id in _task_status_map:
+        task_state_id = _task_status_map[task_id]
+        logger.info(f"使用已有的状态任务ID: {task_state_id} 用于任务 {task_id}")
+    else:
+        task_state_id = status_manager.create_task("RSS处理任务")
+        logger.info(f"创建新的状态任务ID: {task_state_id}")
+        if task_id:
+            _task_status_map[task_id] = task_state_id
+    
     status_manager.update_task(task_state_id, 
                              status=TaskStatus.RUNNING,
                              message="正在加载任务配置...")
@@ -668,22 +684,33 @@ def run_task_now(task_id):
     logger.info(f"立即执行任务 ID: {task_id}")
     
     # 获取状态管理器，创建任务状态
-    status_manager = StatusManager()
+    status_manager = StatusManager.instance()
+    status_task_id = status_manager.create_task(f"执行任务 {task_id}")
+    logger.info(f"创建状态任务ID: {status_task_id} 用于追踪任务 {task_id} 的执行")
+    
     status_manager.update_task(
-        task_id,
+        status_task_id,
         status=TaskStatus.PENDING,
         message="任务已加入队列，等待执行..."
     )
     
+    # Store the status_task_id in a global dictionary to track it during execution
+    # This ensures the original task_id is linked to the status_task_id
+    global _task_status_map
+    if not hasattr(sys.modules[__name__], '_task_status_map'):
+        _task_status_map = {}
+    _task_status_map[task_id] = status_task_id
+    
     # 将任务添加到队列而不是创建新线程
     execute_task(task_id)
     
-    # 返回当前队列状态
+    # 返回当前队列状态及状态追踪ID
     with task_lock:
         return {
             "queued": True,
             "position": task_queue.qsize(),
-            "is_task_running": is_task_running
+            "is_task_running": is_task_running,
+            "status_task_id": status_task_id  # Return this so UI can track it
         }
 
 class Scheduler:

@@ -56,17 +56,46 @@ class CustomStatusBar(QStatusBar):
         self.log_button.clicked.connect(self._open_log_file)
         
         # Don't immediately connect to status_manager to prevent Qt metaclass recursion
+        # Get the StatusManager instance but don't connect to signals yet
+        self.status_manager = StatusManager.instance()
         # Use a delayed connection via QTimer
-        self.status_manager = None
-        QTimer.singleShot(100, self._initialize_status_manager)
+        QTimer.singleShot(500, self._connect_signals)
+        
+        # Initialize with empty state
+        self.current_message = ""
     
-    def _initialize_status_manager(self):
-        """Initialize the status manager with a delay to avoid recursion issues"""
+    def _connect_signals(self):
+        """Connect to signals after a delay to prevent recursion issues"""
         try:
-            # Get the instance without creating a new one if possible
-            self.status_manager = StatusManager.instance()
+            # Make sure we have the status manager
+            if not self.status_manager:
+                self.status_manager = StatusManager.instance()
+            
+            # Ensure any old connections are removed before connecting
+            try:
+                self.status_manager.status_updated.disconnect(self.update_status)
+            except:
+                pass  # No existing connection
+                
+            # Connect to the signal
             self.status_manager.status_updated.connect(self.update_status)
             logger.info("Successfully connected to status manager signals")
+            
+            # Test the connection by updating our own status
+            test_task_id = self.status_manager.create_task("状态栏测试")
+            self.status_manager.update_task(
+                test_task_id, 
+                status=TaskStatus.COMPLETED,
+                message="已就绪"
+            )
+            logger.info(f"Sent test signal with task ID: {test_task_id}")
+            
+            # Debug check - request current state
+            current_tasks = self.status_manager.get_task_queue()
+            if current_tasks:
+                logger.info(f"Found {len(current_tasks)} existing tasks")
+                # Update with the most recent task state
+                self.update_status(current_tasks[-1])
         except Exception as e:
             logger.error(f"Error connecting to status_manager signals: {e}")
     
@@ -79,6 +108,8 @@ class CustomStatusBar(QStatusBar):
     
     def update_status(self, task_state):
         """Update status display"""
+        logger.info(f"Status bar received update: {task_state.status.value} - {task_state.message} - Progress: {task_state.progress}%")
+        
         self.current_message = task_state.message
         
         # Handle animation and colors based on status
