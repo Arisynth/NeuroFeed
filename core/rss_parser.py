@@ -39,8 +39,8 @@ class RssParser:
         
         # 从配置加载时区处理设置
         general_settings = config.get("global_settings", {}).get("general_settings", {})
-        self.assume_utc = general_settings.get("assume_utc_for_no_timezone", True)
-        logger.info(f"时区设置 - 无时区信息时假定为UTC: {'是' if self.assume_utc else '否'}")
+        self.assume_utc = False  # 修正：无时区信息的日期不应假定为UTC
+        logger.info(f"无时区信息时将保留原始时间（假定为本地时间）")
     
     def refresh_settings(self):
         """刷新配置设置，确保使用最新的配置值"""
@@ -56,9 +56,9 @@ class RssParser:
             
             # 刷新时区处理设置
             general_settings = config.get("global_settings", {}).get("general_settings", {})
-            self.assume_utc = general_settings.get("assume_utc_for_no_timezone", True)
+            self.assume_utc = False  # 修正：无时区信息的日期不应假定为UTC
             
-            logger.info(f"时区设置 - 无时区信息时假定为UTC: {'是' if self.assume_utc else '否'}")
+            logger.info(f"无时区信息时将保留原始时间（假定为本地时间）")
             
             # 通过显式返回布尔值避免任何转换问题
             return self.skip_processed is True
@@ -84,9 +84,11 @@ class RssParser:
             # 获取本地时区
             local_tz = datetime.now().astimezone().tzinfo
             # 转换到本地时区并返回
+            logger.debug(f"转换有时区信息的时间 {dt} 到本地时区")
             return dt.astimezone(local_tz)
             
         # 无时区信息则保持原样
+        logger.debug(f"时间 {dt} 无时区信息，保持原样（假定为本地时间）")
         return dt
     
     def fetch_feed(self, feed_url: str, items_count: int = 10, task_id: str = None, recipients: List[str] = None) -> Dict[str, Any]:
@@ -272,13 +274,16 @@ class RssParser:
                 pub_datetime = None
                 if hasattr(entry, 'published_parsed') and entry.published_parsed:
                     pub_datetime = datetime(*entry.published_parsed[:6])
-                    # 转换为本地时区
-                    pub_datetime = self._convert_to_local_time(pub_datetime)
+                    # 注意：feedparser解析的时间通常是UTC时间，但没有时区信息
+                    # 只有确认有时区信息的时间才进行转换，否则保持原样
+                    if pub_datetime.tzinfo is not None:
+                        pub_datetime = self._convert_to_local_time(pub_datetime)
                     published_date = pub_datetime.isoformat()
                 elif hasattr(entry, 'updated_parsed') and entry.updated_parsed:
                     pub_datetime = datetime(*entry.updated_parsed[:6])
-                    # 转换为本地时区
-                    pub_datetime = self._convert_to_local_time(pub_datetime)
+                    # 同样，只对有时区信息的时间进行转换
+                    if pub_datetime.tzinfo is not None:
+                        pub_datetime = self._convert_to_local_time(pub_datetime)
                     published_date = pub_datetime.isoformat()
                 
                 # 获取标题和链接

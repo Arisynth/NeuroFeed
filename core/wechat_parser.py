@@ -25,7 +25,8 @@ class WeChatParser:
         # 从配置加载时区处理设置
         config = load_config()
         general_settings = config.get("global_settings", {}).get("general_settings", {})
-        self.assume_utc = general_settings.get("assume_utc_for_no_timezone", True)
+        self.assume_utc = False  # 修正：无时区信息的日期不应假定为UTC
+        logger.info(f"无时区信息时将保留原始时间（假定为本地时间）")
     
     def _convert_to_local_time(self, dt: datetime) -> datetime:
         """
@@ -45,9 +46,11 @@ class WeChatParser:
             # 获取本地时区
             local_tz = datetime.now().astimezone().tzinfo
             # 转换到本地时区并返回
+            logger.debug(f"转换有时区信息的时间 {dt} 到本地时区")
             return dt.astimezone(local_tz)
             
         # 无时区信息则保持原样
+        logger.debug(f"时间 {dt} 无时区信息，保持原样")
         return dt
     
     def parse_wechat_source(self, feed_url: str, items_count: int = 10) -> Dict[str, Any]:

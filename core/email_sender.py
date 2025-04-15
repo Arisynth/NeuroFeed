@@ -244,13 +244,16 @@ class EmailSender:
             if date_obj.tzinfo is not None:
                 # 转换为本地时区
                 local_tz = datetime.now().astimezone().tzinfo
+                logger.debug(f"转换有时区信息的时间 {date_obj} 到本地时区")
                 return date_obj.astimezone(local_tz)
             
             # 无时区信息则直接使用
+            logger.debug(f"时间 {date_obj} 无时区信息，保持原样（假定为本地时间）")
             return date_obj
             
         except (ValueError, TypeError):
             # 如果解析失败，返回None
+            logger.debug(f"无法解析日期字符串: {pub_date}")
             return None
     
     def _create_html_digest(self, sorted_contents: List[Dict[str, Any]], 
