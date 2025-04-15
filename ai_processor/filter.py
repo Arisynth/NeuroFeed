@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from enum import Enum
 from datetime import datetime
 from ai_processor.ai_utils import AiService, AiException
+import json
 
 # 配置日志
 logger = logging.getLogger("content_filter")
@@ -189,8 +190,56 @@ class ContentFilter:
         logger.info(f"\n============ AI响应内容 ============")
         logger.info(f"AI响应原文 ({len(evaluation_text)} 字符):\n{evaluation_text}\n")
         
-        # 使用共享的AI服务解析JSON，如果失败将抛出异常
-        result = self.ai_service.parse_json_response(evaluation_text)
+        try:
+            # 首先尝试直接解析
+            result = self.ai_service.parse_json_response(evaluation_text)
+        except Exception as e:
+            # 如果解析失败，尝试修复常见的JSON错误
+            logger.warning(f"初次解析JSON失败: {str(e)}，尝试修复JSON...")
+            
+            try:
+                # 尝试修复缺少结束大括号的问题
+                fixed_json = evaluation_text.strip()
+                # 统计左右大括号数量
+                open_braces = fixed_json.count('{')
+                close_braces = fixed_json.count('}')
+                
+                # 如果缺少右大括号，添加缺少的部分
+                if open_braces > close_braces:
+                    logger.info(f"检测到缺少 {open_braces - close_braces} 个右大括号，尝试修复")
+                    fixed_json += "}" * (open_braces - close_braces)
+                
+                # 尝试再次解析
+                result = json.loads(fixed_json)
+                logger.info("JSON修复成功")
+            except Exception as e2:
+                # 如果仍然失败，尝试使用更严格的方式查找JSON部分
+                logger.warning(f"修复JSON仍然失败: {str(e2)}，尝试提取JSON部分...")
+                
+                try:
+                    # 尝试找到JSON的开始和结束位置
+                    start_idx = evaluation_text.find('{')
+                    if start_idx != -1:
+                        # 从找到的第一个 { 开始尝试解析
+                        potential_json = evaluation_text[start_idx:]
+                        # 确保JSON对象完整
+                        open_count = 0
+                        for i, char in enumerate(potential_json):
+                            if char == '{':
+                                open_count += 1
+                            elif char == '}':
+                                open_count -= 1
+                                if open_count == 0:
+                                    # 找到完整的JSON对象
+                                    complete_json = potential_json[:i+1]
+                                    result = json.loads(complete_json)
+                                    logger.info(f"成功提取并解析JSON部分: {complete_json[:50]}...")
+                                    break
+                    else:
+                        raise AiException("无法在AI响应中找到JSON开始标记")
+                except Exception as e3:
+                    # 所有尝试都失败，抛出组合异常
+                    raise AiException(f"无法解析AI响应的JSON格式: 原始错误: {str(e)}, 修复尝试错误: {str(e2)}, 提取尝试错误: {str(e3)}")
         
         # 验证结果结构
         if not all(k in result for k in ["interest_match", "importance", "timeliness", "interest_level"]):

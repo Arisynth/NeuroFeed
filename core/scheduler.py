@@ -54,6 +54,7 @@ def process_task_queue():
             try:
                 # 实际执行任务
                 _execute_task(task_id)
+                logger.info(f"任务 ID:{task_id or '所有任务'} 执行完成")
                 
             except Exception as e:
                 # 捕获任务执行过程中的异常，但不退出线程
@@ -81,7 +82,7 @@ def process_task_queue():
                     is_task_running = False
                     
                 logger.info(f"\n=====================================================")
-                logger.info(f"任务 ID:{task_id or '所有任务'} 处理完成")
+                logger.info(f"任务 ID:{task_id or '所有任务'} 处理完成，线程准备处理下一个任务")
                 logger.info(f"队列中剩余任务数量: {task_queue.qsize()}")
                 logger.info(f"=====================================================\n")
             
@@ -101,6 +102,7 @@ def process_task_queue():
                 
             # 短暂暂停后继续
             time.sleep(5)
+            continue  # 明确继续循环
 
 def ensure_processor_running():
     """确保任务处理线程在运行"""
@@ -110,10 +112,21 @@ def ensure_processor_running():
         # 检查线程是否已存在且正在运行
         if task_processing_thread is None or not task_processing_thread.is_alive():
             logger.info("启动新的任务队列处理线程")
+            # 创建新线程前先尝试清理可能存在的旧线程
+            if task_processing_thread is not None:
+                logger.warning("检测到旧处理线程已死，正在创建新线程")
+            
             task_processing_thread = threading.Thread(target=process_task_queue, daemon=True)
+            task_processing_thread.name = "TaskProcessorThread"  # 为线程命名方便调试
             task_processing_thread.start()
+            
+            # 短暂等待确保线程启动
+            time.sleep(0.1)
+            logger.info(f"任务处理线程已启动: {task_processing_thread.name}, 活动状态: {task_processing_thread.is_alive()}")
         else:
-            logger.info("任务处理线程已在运行中")
+            logger.info(f"任务处理线程已在运行中: {task_processing_thread.name}, 活动状态: {task_processing_thread.is_alive()}")
+            # 增加一个健康检查，即使线程状态为alive，也打印更多信息以便调试
+            logger.info(f"队列信息 - 大小: {task_queue.qsize()}, 当前任务状态: {'执行中' if is_task_running else '空闲'}")
 
 def _execute_task(task_id=None):
     """实际执行任务的函数 (被process_task_queue调用)"""
