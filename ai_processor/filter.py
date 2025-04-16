@@ -53,6 +53,23 @@ class ContentFilter:
         title = content.get("title", "无标题")
         summary = content.get("summary", "")
         feed_labels = content.get("feed_labels", [])
+        
+        # 确保我们获取了负向标签 - 如果content里没有，就从task里获取
+        negative_labels = content.get("negative_labels", [])
+        feed_url = content.get("feed_url")
+        task = content.get("task")
+        
+        # 如果没有负向标签但有任务对象和feed URL，则从任务配置中获取
+        if not negative_labels and task and feed_url and hasattr(task, 'get_feed_negative_labels'):
+            try:
+                negative_labels = task.get_feed_negative_labels(feed_url)
+                # 记录从任务配置获取的标签
+                logger.info(f"从任务配置获取负向标签: {negative_labels}")
+                # 更新内容字典以包含这些标签供后续处理使用
+                content["negative_labels"] = negative_labels
+            except Exception as e:
+                logger.error(f"尝试从任务获取负向标签时出错: {str(e)}")
+        
         published_date = content.get("published", "未知")
         
         # 更详细地记录内容
@@ -61,6 +78,7 @@ class ContentFilter:
         logger.info(f"链接: {content.get('link', '无链接')}")
         logger.info(f"来源: {content.get('source', '未知来源')}")
         logger.info(f"RSS源标签: {feed_labels}")
+        logger.info(f"RSS源反向标签: {negative_labels}")
         logger.info(f"当前时间: {datetime.now().isoformat()}")
         
         # 打印摘要（截断以防太长）
@@ -94,11 +112,13 @@ class ContentFilter:
         # 记录评估结果
         is_match = evaluation_result["interest_match"]["is_match"]
         matched_tags = evaluation_result["interest_match"]["matched_tags"]
+        negative_match = evaluation_result["negative_match"]["is_match"]
+        negative_matched_tags = evaluation_result["negative_match"]["matched_tags"]
         importance = evaluation_result["importance"]["rating"]
         timeliness = evaluation_result["timeliness"]["rating"]
         interest_level = evaluation_result["interest_level"]["rating"]
         
-        logger.info(f"评估结果: 兴趣匹配={is_match} {matched_tags}, 重要性={importance}, 时效性={timeliness}, 趣味性={interest_level}")
+        logger.info(f"评估结果: 兴趣匹配={is_match} {matched_tags}, 反向标签匹配={negative_match} {negative_matched_tags}, 重要性={importance}, 时效性={timeliness}, 趣味性={interest_level}")
         
         # 更新并返回内容字典
         content.update({
@@ -122,6 +142,7 @@ class ContentFilter:
         summary = content.get("summary", "")
         full_content = content.get("content", "")
         feed_labels = content.get("feed_labels", [])
+        negative_labels = content.get("negative_labels", [])
         
         # 获取当前日期时间信息
         current_datetime = datetime.now()
@@ -137,6 +158,9 @@ class ContentFilter:
         
         # 将兴趣标签格式化为字符串 - 使用RSS源特定的标签
         interests_str = ", ".join([f'"{tag}"' for tag in feed_labels])
+        
+        # 将反向标签格式化为字符串
+        negative_interests_str = ", ".join([f'"{tag}"' for tag in negative_labels]) if negative_labels else "无反向标签"
         
         # 提取内容的发布时间（如果有）进行记录
         content_published = content.get("published", "未知")
@@ -157,19 +181,46 @@ class ContentFilter:
 ## 该RSS源关注的标签
 {interests_str}
 
+## 该RSS源的反向标签（不希望看到的内容类型）
+{negative_interests_str}
+
 ## 评估要求
 1. 兴趣匹配：这条新闻是否符合该RSS源关注的标签？如果有，请指明具体匹配的标签；如果不符合任何标签，请说明。
-2. 重要性：这条新闻的重要性如何？（极低、低、中、高、极高）
-3. 时效性：考虑当前日期（{current_date_str}），该新闻的时效性如何？（极低、低、中、高、极高）
+2. 反向标签匹配：这条新闻是否符合任何反向标签？如果有，请指明具体匹配的反向标签；如果不符合任何反向标签，请说明。
+3. 重要性：这条新闻的重要性如何？（极低、低、中、高、极高）
+4. 时效性：考虑当前日期（{current_date_str}），该新闻的时效性如何？（极低、低、中、高、极高）
    - 极高：今日/昨日的突发新闻或重大事件
    - 高：本周内的重要发展或更新
    - 中：本月内的相关信息
    - 低：几个月前的旧闻或一般性信息
    - 极低：明显过时或与当前环境无关的内容
-4. 趣味性：这条新闻的趣味性如何？（极低、低、中、高、极高）
+5. 趣味性：这条新闻的趣味性如何？（极低、低、中、高、极高）
 
 请按以下JSON格式返回评估结果：
-{{ "interest_match": {{ "is_match": true/false, "matched_tags": ["标签1", "标签2"], "explanation": "解释为什么匹配或不匹配" }}, "importance": {{ "rating": "极低/低/中/高/极高", "explanation": "解释为什么给出这个评级" }}, "timeliness": {{ "rating": "极低/低/中/高/极高", "explanation": "解释为什么给出这个评级" }}, "interest_level": {{ "rating": "极低/低/中/高/极高", "explanation": "解释为什么给出这个评级" }} }}
+{{ 
+  "interest_match": {{ 
+    "is_match": true/false, 
+    "matched_tags": ["标签1", "标签2"], 
+    "explanation": "解释为什么匹配或不匹配" 
+  }},
+  "negative_match": {{ 
+    "is_match": true/false, 
+    "matched_tags": ["反向标签1", "反向标签2"], 
+    "explanation": "解释为什么匹配或不匹配反向标签" 
+  }},
+  "importance": {{ 
+    "rating": "极低/低/中/高/极高", 
+    "explanation": "解释为什么给出这个评级" 
+  }}, 
+  "timeliness": {{ 
+    "rating": "极低/低/中/高/极高", 
+    "explanation": "解释为什么给出这个评级" 
+  }}, 
+  "interest_level": {{ 
+    "rating": "极低/低/中/高/极高", 
+    "explanation": "解释为什么给出这个评级" 
+  }} 
+}}
 
 请只返回JSON格式的评估结果，严格遵守要求中定义的JSON格式，不要有任何其他文本。
 """
@@ -242,12 +293,26 @@ class ContentFilter:
                     raise AiException(f"无法解析AI响应的JSON格式: 原始错误: {str(e)}, 修复尝试错误: {str(e2)}, 提取尝试错误: {str(e3)}")
         
         # 验证结果结构
-        if not all(k in result for k in ["interest_match", "importance", "timeliness", "interest_level"]):
+        required_fields = ["interest_match", "importance", "timeliness", "interest_level"]
+        
+        # 添加对反向标签的处理
+        if "negative_match" not in result:
+            # 如果AI没有返回negative_match字段，添加一个默认值
+            logger.warning("AI响应中缺少negative_match字段，使用默认值")
+            result["negative_match"] = {
+                "is_match": False,
+                "matched_tags": [],
+                "explanation": "AI未评估反向标签匹配"
+            }
+        
+        if not all(k in result for k in required_fields):
             raise AiException("AI响应缺少必要的评估字段，请检查AI响应格式")
         
         # 记录解析结果
         is_match = result["interest_match"]["is_match"]
         matched_tags = result["interest_match"]["matched_tags"]
+        negative_match = result["negative_match"]["is_match"]
+        negative_matched_tags = result["negative_match"].get("matched_tags", [])
         importance = result["importance"]["rating"]
         timeliness = result["timeliness"]["rating"]
         interest_level = result["interest_level"]["rating"]
@@ -256,6 +321,9 @@ class ContentFilter:
         logger.info(f"兴趣匹配: {is_match}")
         logger.info(f"匹配标签: {matched_tags}")
         logger.info(f"匹配解释: {result['interest_match']['explanation']}")
+        logger.info(f"反向标签匹配: {negative_match}")
+        logger.info(f"匹配的反向标签: {negative_matched_tags}")
+        logger.info(f"反向匹配解释: {result['negative_match'].get('explanation', '无解释')}")
         logger.info(f"重要性: {importance}")
         logger.info(f"重要性解释: {result['importance']['explanation']}")
         logger.info(f"时效性: {timeliness}")
@@ -270,6 +338,11 @@ class ContentFilter:
         # 提取评估信息
         is_interest_match = evaluation["interest_match"]["is_match"]
         matched_tags = evaluation["interest_match"]["matched_tags"]
+        
+        # 检查反向标签匹配
+        is_negative_match = evaluation["negative_match"]["is_match"]
+        negative_matched_tags = evaluation["negative_match"].get("matched_tags", [])
+        
         importance = evaluation["importance"]["rating"]
         timeliness = evaluation["timeliness"]["rating"]
         interest_level = evaluation["interest_level"]["rating"]
@@ -277,9 +350,16 @@ class ContentFilter:
         # 记录详细的筛选逻辑
         logger.info(f"\n============ 过滤决策过程 ============")
         logger.info(f"兴趣匹配: {is_interest_match} (标签: {matched_tags})")
+        logger.info(f"反向标签匹配: {is_negative_match} (匹配标签: {negative_matched_tags})")
         logger.info(f"重要性: {importance}")
         logger.info(f"时效性: {timeliness}")
         logger.info(f"趣味性: {interest_level}")
+        
+        # 首先检查反向标签 - 如果匹配任何反向标签，立即丢弃
+        if is_negative_match and negative_matched_tags:
+            logger.info("条件检查0: 内容匹配反向标签")
+            logger.info(f"丢弃原因：匹配反向标签 {negative_matched_tags}")
+            return False
         
         # 筛选逻辑检查，记录每个检查的结果
         # 1. 如果不是用户兴趣且重要性不是极高且不是极有意思，丢弃
@@ -349,7 +429,25 @@ class ContentFilter:
                 # 每条内容都显示进度
                 title = content.get("title", "无标题")
                 feed_labels = content.get("feed_labels", [])
-                logger.info(f"过滤进度: {index+1}/{len(contents)} - {title[:30]}{'...' if len(title) > 30 else ''} (标签: {feed_labels})")
+                
+                # 增强逻辑，确保我们有负向标签
+                negative_labels = content.get("negative_labels", [])
+                feed_url = content.get("feed_url")
+                task = content.get("task")
+                
+                # 如果没有负向标签但有任务对象和feed URL，则从任务配置中获取
+                if not negative_labels and task and feed_url and hasattr(task, 'get_feed_negative_labels'):
+                    try:
+                        negative_labels = task.get_feed_negative_labels(feed_url)
+                        content["negative_labels"] = negative_labels
+                    except Exception as e:
+                        logger.error(f"尝试从任务获取负向标签时出错: {str(e)}")
+                
+                label_info = f"标签: {feed_labels}"
+                if negative_labels:
+                    label_info += f", 反向标签: {negative_labels}"
+                
+                logger.info(f"过滤进度: {index+1}/{len(contents)} - {title[:30]}{'...' if len(title) > 30 else ''} ({label_info})")
                 
                 # 评估每个内容
                 evaluated_content = self.evaluate_content(content)
@@ -388,10 +486,16 @@ class ContentFilter:
                     if "evaluation" in content:
                         eval_data = content["evaluation"]
                         is_match = eval_data.get("interest_match", {}).get("is_match", False)
+                        negative_match = eval_data.get("negative_match", {}).get("is_match", False)
+                        negative_tags = eval_data.get("negative_match", {}).get("matched_tags", [])
                         importance = eval_data.get("importance", {}).get("rating", "未知")
                         timeliness = eval_data.get("timeliness", {}).get("rating", "未知")
                         interest_level = eval_data.get("interest_level", {}).get("rating", "未知")
-                        reason = f"兴趣匹配: {is_match}, 重要性: {importance}, 时效性: {timeliness}, 趣味性: {interest_level}"
+                        
+                        if negative_match:
+                            reason = f"匹配反向标签: {negative_tags}, 兴趣匹配: {is_match}, 重要性: {importance}, 时效性: {timeliness}, 趣味性: {interest_level}"
+                        else:
+                            reason = f"兴趣匹配: {is_match}, 重要性: {importance}, 时效性: {timeliness}, 趣味性: {interest_level}"
                     logger.info(f"丢弃内容 #{i+1}: {title} - {reason}")
             
             # 记录保留内容的标题
@@ -403,10 +507,11 @@ class ContentFilter:
                     if "evaluation" in content:
                         eval_data = content["evaluation"]
                         is_match = eval_data.get("interest_match", {}).get("is_match", False)
+                        negative_match = eval_data.get("negative_match", {}).get("is_match", False)
                         importance = eval_data.get("importance", {}).get("rating", "未知")
                         timeliness = eval_data.get("timeliness", {}).get("rating", "未知")
                         interest_level = eval_data.get("interest_level", {}).get("rating", "未知")
-                        reason = f"兴趣匹配: {is_match}, 重要性: {importance}, 时效性: {timeliness}, 趣味性: {interest_level}"
+                        reason = f"兴趣匹配: {is_match}, 未匹配反向标签: {not negative_match}, 重要性: {importance}, 时效性: {timeliness}, 趣味性: {interest_level}"
                     logger.info(f"保留内容 #{i+1}: {title} - {reason}")
                     
         return kept_contents, discarded_contents

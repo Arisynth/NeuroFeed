@@ -225,7 +225,8 @@ class WeChatParser:
                 "content": content,
                 "link": link,
                 "published": published,
-                "source": feed_title or "微信公众号"
+                "source": feed_title or "微信公众号",
+                "feed_url": feed_url  # 添加feed_url以便后续获取标签
             })
         
         return items
@@ -277,7 +278,8 @@ class WeChatParser:
                 "content": content,
                 "link": link,
                 "published": published,
-                "source": feed_title or "微信公众号" 
+                "source": feed_title or "微信公众号",
+                "feed_url": feed_url  # 添加feed_url以便后续获取标签
             })
         
         return items
@@ -371,7 +373,8 @@ class WeChatParser:
                 "content": content,
                 "link": feed_url,
                 "published": datetime.now().isoformat(),
-                "source": feed_title or "微信公众号"  # Use the extracted source name
+                "source": feed_title or "微信公众号",  # Use the extracted source name
+                "feed_url": feed_url  # 添加feed_url以便后续获取标签
             })
             
             logger.info(f"Extracted WeChat article with title: '{title}' and content length: {len(content)} characters")

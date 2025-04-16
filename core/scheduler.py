@@ -315,11 +315,17 @@ def _execute_task(task_id=None):
                     
                     # 为每个条目添加feed特定标签
                     feed_labels = task.get_feed_labels(feed_url)
-                    logger.info(f"从 {feed_url} 添加 {len(items)} 条内容，标签: {feed_labels}")
+                    # 新增：添加获取反向标签
+                    negative_labels = task.get_feed_negative_labels(feed_url)
+                    logger.info(f"从 {feed_url} 添加 {len(items)} 条内容，标签: {feed_labels}, 反向标签: {negative_labels}")
                     
                     for i, item in enumerate(items):
                         item["feed_url"] = feed_url
                         item["feed_labels"] = feed_labels
+                        # 新增：添加反向标签到条目
+                        item["negative_labels"] = negative_labels
+                        # 新增：添加任务对象，这样filter可以在需要时获取最新的配置
+                        item["task"] = task
                         title = item.get("title", "无标题")
                         # 只记录前3个条目的详细信息，避免日志过多
                         if i < 3:

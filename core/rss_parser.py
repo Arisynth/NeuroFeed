@@ -304,7 +304,8 @@ class RssParser:
                     "published": published_date,
                     "source": feed.feed.title if hasattr(feed, 'feed') and hasattr(feed.feed, 'title') else feed_url,
                     "content": entry.content[0].value if hasattr(entry, 'content') and entry.content else summary if hasattr(entry, 'summary') else "",
-                    "article_id": article_id  # 保存原始文章ID用于后续处理
+                    "article_id": article_id,  # 保存原始文章ID用于后续处理
+                    "feed_url": feed_url  # 添加feed_url以便后续获取标签
                 }
                 
                 # 记录内容长度

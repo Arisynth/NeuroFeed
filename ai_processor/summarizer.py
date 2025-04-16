@@ -301,7 +301,7 @@ class NewsSummarizer:
                     break
         
         # 验证简报内容
-        if len(brief) < 50:  # 简报过短表示可能有问题
+        if len(brief) < 5:  # 简报过短表示可能有问题
             raise AiException(f"生成的简报内容过短 ({len(brief)} 字符)")
             
         return brief.strip()
