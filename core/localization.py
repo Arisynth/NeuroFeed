@@ -92,6 +92,11 @@ For the full article, please click the "Read Original" link.""",
         # Interest tags
         "interest_tags": "Interest Tags",
         "set_interests": "Set your interest tags that will be automatically applied when adding new RSS feeds",
+        "set_negative_interests": "Set tags for topics you want to exclude from your news feed.",
+        "positive_interests_title": "Interested Topics",
+        "negative_interests_title": "Excluded Topics",
+        "feed_labels_desc": "Add content labels for this feed. News containing these topics will be prioritized.",
+        "feed_negative_labels_desc": "Add labels for topics you want to exclude from this feed.",
         
         # Scheduler
         "schedule_settings": "Schedule Settings",
@@ -372,7 +377,12 @@ For the full article, please click the "Read Original" link.""",
         
         # Interest tags
         "interest_tags": "兴趣标签",
-        "set_interests": "设置您的兴趣标签，添加新RSS源时将自动应用",
+        "set_interests": "设置您感兴趣的主题标签。这些标签将在添加新RSS源时用作默认值。",
+        "set_negative_interests": "设置您希望从新闻流中排除的主题标签。",
+        "positive_interests_title": "感兴趣的主题",
+        "negative_interests_title": "排除的主题",
+        "feed_labels_desc": "为此源添加内容标签。包含这些主题的新闻将被优先考虑。",
+        "feed_negative_labels_desc": "添加您希望从此源中排除的主题标签。",
         
         # Scheduler
         "schedule_settings": "定时设置",

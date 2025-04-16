@@ -26,14 +26,16 @@
                     "labels": [
                         "tech",
                         "news"
-                    ]
+                    ],
+                    "negative_labels": []
                 },
                 "https://another-example.com/feed": {
                     "items_count": 10,
                     "labels": [
                         "science",
                         "tech"
-                    ]
+                    ],
+                    "negative_labels": []
                 }
             }
         }
@@ -65,6 +67,7 @@
             "tech",
             "science",
             "business"
-        ]
+        ],
+        "user_negative_interests": []
     }
 }

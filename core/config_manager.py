@@ -72,7 +72,8 @@ def initialize_config():
                         "language": "en",
                         "db_retention_days": 30
                     },
-                    "user_interests": []
+                    "user_interests": [],
+                    "user_negative_interests": []
                 }
             }
             with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
@@ -110,7 +111,8 @@ def load_config():
                 "language": "en",
                 "db_retention_days": 30
             },
-            "user_interests": []
+            "user_interests": [],
+            "user_negative_interests": []
         }
     }
     

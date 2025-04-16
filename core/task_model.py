@@ -109,3 +109,15 @@ class Task:
         if feed_url not in self.feed_config:
             self.feed_config[feed_url] = {}
         self.feed_config[feed_url]["labels"] = labels
+    
+    def get_feed_negative_labels(self, feed_url):
+        """Get the negative labels for a specific feed URL"""
+        if feed_url in self.feed_config and "negative_labels" in self.feed_config[feed_url]:
+            return self.feed_config[feed_url]["negative_labels"]
+        return []
+
+    def set_feed_negative_labels(self, feed_url, negative_labels):
+        """Set the negative labels for a specific feed URL"""
+        if feed_url not in self.feed_config:
+            self.feed_config[feed_url] = {}
+        self.feed_config[feed_url]["negative_labels"] = negative_labels

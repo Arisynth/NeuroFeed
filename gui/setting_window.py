@@ -563,11 +563,15 @@ class SettingsWindow(QDialog):
         interests_tab = QWidget()
         layout = QVBoxLayout(interests_tab)
         
-        # Description label - 移除加粗，左对齐
+        # === 正向标签区域 ===
+        positive_group = QGroupBox(get_text("positive_interests_title"))
+        positive_layout = QVBoxLayout(positive_group)
+        
+        # 正向标签描述
         description = QLabel(get_text("set_interests"))
         description.setWordWrap(True)
         description.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        layout.addWidget(description)
+        positive_layout.addWidget(description)
         
         # 获取当前用户兴趣标签
         user_interests = self.global_settings.get("user_interests", [])
@@ -577,8 +581,33 @@ class SettingsWindow(QDialog):
         if user_interests:
             self.tag_editor.set_tags(user_interests)
         
-        layout.addWidget(self.tag_editor)
-        layout.addStretch()
+        positive_layout.addWidget(self.tag_editor)
+        positive_layout.addStretch()
+        
+        # === 反向标签区域 ===
+        negative_group = QGroupBox(get_text("negative_interests_title"))
+        negative_layout = QVBoxLayout(negative_group)
+        
+        # 反向标签描述
+        neg_description = QLabel(get_text("set_negative_interests"))
+        neg_description.setWordWrap(True)
+        neg_description.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        negative_layout.addWidget(neg_description)
+        
+        # 获取当前用户反向兴趣标签
+        user_negative_interests = self.global_settings.get("user_negative_interests", [])
+        
+        # 创建反向标签编辑器 - 优化为只有1行高
+        self.negative_tag_editor = TagEditor(rows=1)
+        if user_negative_interests:
+            self.negative_tag_editor.set_tags(user_negative_interests)
+        
+        negative_layout.addWidget(self.negative_tag_editor)
+        negative_layout.addStretch()
+        
+        # 添加两个区域到主布局
+        layout.addWidget(positive_group)
+        layout.addWidget(negative_group)
         
         self.tabs.addTab(interests_tab, get_text("interest_tags"))
 
@@ -649,11 +678,15 @@ class SettingsWindow(QDialog):
         # 获取用户兴趣标签
         user_interests = self.tag_editor.get_tags()
         
+        # 获取用户反向兴趣标签
+        user_negative_interests = self.negative_tag_editor.get_tags()
+        
         # 重要：确保在更新全局设置时不会覆盖通用设置
         self.global_settings["general_settings"] = general_settings
         self.global_settings["email_settings"] = email_settings
         self.global_settings["ai_settings"] = ai_settings
         self.global_settings["user_interests"] = user_interests
+        self.global_settings["user_negative_interests"] = user_negative_interests
         
         # 保存整个配置
         self.config["global_settings"] = self.global_settings

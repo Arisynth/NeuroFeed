@@ -182,22 +182,25 @@ class FeedManager(QWidget):
         from core.config_manager import load_config
         config = load_config()
         default_labels = config.get("global_settings", {}).get("user_interests", [])
+        default_negative_labels = config.get("global_settings", {}).get("user_negative_interests", [])
         
-        dialog = FeedConfigDialog(self, labels=default_labels)
+        dialog = FeedConfigDialog(self, labels=default_labels, negative_labels=default_negative_labels)
         if dialog.exec():
             feed_url = dialog.get_feed_url()
             items_count = dialog.get_items_count()
             labels = dialog.get_labels()
+            negative_labels = dialog.get_negative_labels()
             
             if feed_url:
                 self.current_task.rss_feeds.append(feed_url)
                 self.current_task.set_feed_items_count(feed_url, items_count)
                 self.current_task.set_feed_labels(feed_url, labels)
+                self.current_task.set_feed_negative_labels(feed_url, negative_labels)
                 from core.config_manager import save_task
                 save_task(self.current_task)
                 self.update_feed_table()
                 self.feed_updated.emit()
-    
+
     def edit_feed(self):
         """Edit the selected feed"""
         if not self.current_task:
@@ -208,12 +211,14 @@ class FeedManager(QWidget):
             feed_url = self.current_task.rss_feeds[current_row]
             items_count = self.current_task.get_feed_items_count(feed_url)
             labels = self.current_task.get_feed_labels(feed_url)
+            negative_labels = self.current_task.get_feed_negative_labels(feed_url)
             
-            dialog = FeedConfigDialog(self, feed_url, items_count, labels)
+            dialog = FeedConfigDialog(self, feed_url, items_count, labels, negative_labels)
             if dialog.exec():
                 new_url = dialog.get_feed_url()
                 new_count = dialog.get_items_count()
                 new_labels = dialog.get_labels()
+                new_negative_labels = dialog.get_negative_labels()
                 
                 # Keep feed status if URL doesn't change
                 if new_url != feed_url:
@@ -227,6 +232,7 @@ class FeedManager(QWidget):
                 # Update items count and labels
                 self.current_task.set_feed_items_count(new_url, new_count)
                 self.current_task.set_feed_labels(new_url, new_labels)
+                self.current_task.set_feed_negative_labels(new_url, new_negative_labels)
                 from core.config_manager import save_task
                 save_task(self.current_task)
                 self.update_feed_table()
