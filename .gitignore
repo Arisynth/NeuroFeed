@@ -194,6 +194,7 @@ ENV/
 *.swp
 .DS_Store
 
-# Other test files
+# Other files
 .atom
 .rss
+.DS_Store
