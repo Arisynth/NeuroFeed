@@ -87,9 +87,11 @@ class RssParser:
             logger.debug(f"转换有时区信息的时间 {dt} 到本地时区")
             return dt.astimezone(local_tz)
             
-        # 无时区信息则保持原样
-        logger.debug(f"时间 {dt} 无时区信息，保持原样（假定为本地时间）")
-        return dt
+        # feedparser解析的时间通常是UTC时间，但没有时区信息
+        # 这里做一个明确的假设：无时区信息的feedparser时间是UTC时间
+        logger.debug(f"时间 {dt} 无时区信息，假定为UTC时间并转换为本地时间")
+        utc_dt = dt.replace(tzinfo=pytz.UTC)
+        return utc_dt.astimezone(datetime.now().astimezone().tzinfo)
     
     def fetch_feed(self, feed_url: str, items_count: int = 10, task_id: str = None, recipients: List[str] = None) -> Dict[str, Any]:
         """获取RSS Feed内容
@@ -274,16 +276,16 @@ class RssParser:
                 pub_datetime = None
                 if hasattr(entry, 'published_parsed') and entry.published_parsed:
                     pub_datetime = datetime(*entry.published_parsed[:6])
-                    # 注意：feedparser解析的时间通常是UTC时间，但没有时区信息
-                    # 只有确认有时区信息的时间才进行转换，否则保持原样
-                    if pub_datetime.tzinfo is not None:
-                        pub_datetime = self._convert_to_local_time(pub_datetime)
+                    # feedparser解析的时间是UTC时间，但没有时区信息
+                    # 明确添加UTC时区信息后再转换到本地时间
+                    pub_datetime = pub_datetime.replace(tzinfo=pytz.UTC)
+                    pub_datetime = self._convert_to_local_time(pub_datetime)
                     published_date = pub_datetime.isoformat()
                 elif hasattr(entry, 'updated_parsed') and entry.updated_parsed:
                     pub_datetime = datetime(*entry.updated_parsed[:6])
-                    # 同样，只对有时区信息的时间进行转换
-                    if pub_datetime.tzinfo is not None:
-                        pub_datetime = self._convert_to_local_time(pub_datetime)
+                    # 同样，明确添加UTC时区信息后再转换
+                    pub_datetime = pub_datetime.replace(tzinfo=pytz.UTC)
+                    pub_datetime = self._convert_to_local_time(pub_datetime)
                     published_date = pub_datetime.isoformat()
                 
                 # 获取标题和链接

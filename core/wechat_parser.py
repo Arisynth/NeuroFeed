@@ -30,7 +30,7 @@ class WeChatParser:
     
     def _convert_to_local_time(self, dt: datetime) -> datetime:
         """
-        只对有时区信息的日期进行转换，没有时区信息的保持原样
+        转换时间到本地时区，特别处理WeChat的时间格式
         
         Args:
             dt: 输入的datetime对象
@@ -48,10 +48,11 @@ class WeChatParser:
             # 转换到本地时区并返回
             logger.debug(f"转换有时区信息的时间 {dt} 到本地时区")
             return dt.astimezone(local_tz)
-            
-        # 无时区信息则保持原样
-        logger.debug(f"时间 {dt} 无时区信息，保持原样")
-        return dt
+        
+        # 无时区信息的时间，假设为UTC时间（Atom和RSS标准通常是UTC）
+        logger.debug(f"时间 {dt} 无时区信息，假定为UTC时间并转换为本地时间")
+        utc_dt = dt.replace(tzinfo=pytz.UTC)
+        return utc_dt.astimezone(datetime.now().astimezone().tzinfo)
     
     def parse_wechat_source(self, feed_url: str, items_count: int = 10) -> Dict[str, Any]:
         """Parse WeChat specific sources which don't follow standard feed formats
@@ -260,7 +261,9 @@ class WeChatParser:
             if pub_date_tag and pub_date_tag.text:
                 try:
                     # 尝试解析ISO格式日期
-                    pub_datetime = datetime.fromisoformat(pub_date_tag.text.replace('Z', '+00:00'))
+                    # 'Z'后缀表示UTC时间，将其替换成正确的时区格式
+                    pub_text = pub_date_tag.text.replace('Z', '+00:00')
+                    pub_datetime = datetime.fromisoformat(pub_text)
                     # 转换为本地时区
                     pub_datetime = self._convert_to_local_time(pub_datetime)
                     published = pub_datetime.isoformat()

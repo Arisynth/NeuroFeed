@@ -1,6 +1,7 @@
 import smtplib
 import logging
 import re
+import pytz  # Add the missing import for timezone handling
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
@@ -225,7 +226,7 @@ class EmailSender:
     
     def _convert_published_date_to_local(self, pub_date: str) -> datetime:
         """
-        尝试将ISO格式的发布日期字符串转换为datetime对象，只对有时区信息的进行转换
+        将ISO格式的发布日期字符串转换为datetime对象
         
         Args:
             pub_date: ISO格式的日期字符串
@@ -237,23 +238,60 @@ class EmailSender:
             return None
             
         try:
-            # 尝试解析ISO格式日期
-            date_obj = datetime.fromisoformat(pub_date.replace('Z', '+00:00'))
+            # 处理不同格式的日期字符串
             
-            # 只有当日期对象有时区信息时才进行转换
-            if date_obj.tzinfo is not None:
-                # 转换为本地时区
-                local_tz = datetime.now().astimezone().tzinfo
-                logger.debug(f"转换有时区信息的时间 {date_obj} 到本地时区")
-                return date_obj.astimezone(local_tz)
+            # 1. 处理ISO格式的日期 (2025-03-29T03:37:30.000Z 或 2025-03-29T03:37:30+00:00)
+            if 'T' in pub_date:
+                # 处理 'Z' 后缀，将其替换为 +00:00 以表示 UTC
+                if pub_date.endswith('Z'):
+                    pub_date = pub_date[:-1] + '+00:00'
+                
+                # 尝试解析ISO格式日期
+                date_obj = datetime.fromisoformat(pub_date)
+                
+                # 如果日期对象没有时区信息，添加UTC时区
+                if date_obj.tzinfo is None:
+                    date_obj = date_obj.replace(tzinfo=pytz.UTC)
+                    
+            # 2. 处理标准RFC 2822格式 (Tue, 01 Apr 2025 12:54:17 GMT)
+            else:
+                try:
+                    # 使用email.utils来解析RFC 2822格式的日期
+                    from email.utils import parsedate_to_datetime
+                    date_obj = parsedate_to_datetime(pub_date)
+                except Exception:
+                    # 如果以上方法都失败，尝试最后一种方法
+                    try:
+                        # 尝试使用datetime直接解析
+                        formats = [
+                            "%Y-%m-%d %H:%M:%S",
+                            "%Y/%m/%d %H:%M:%S",
+                            "%Y-%m-%d",
+                            "%Y/%m/%d"
+                        ]
+                        
+                        for fmt in formats:
+                            try:
+                                date_obj = datetime.strptime(pub_date, fmt)
+                                # 没有时区信息，设为UTC
+                                date_obj = date_obj.replace(tzinfo=pytz.UTC)
+                                break
+                            except ValueError:
+                                continue
+                        else:
+                            # 所有格式都失败
+                            return None
+                    except:
+                        return None
             
-            # 无时区信息则直接使用
-            logger.debug(f"时间 {date_obj} 无时区信息，保持原样（假定为本地时间）")
-            return date_obj
+            # 转换为本地时区
+            local_tz = datetime.now().astimezone().tzinfo
+            logger.debug(f"转换时间 {date_obj} 到本地时区")
+            return date_obj.astimezone(local_tz)
             
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
             # 如果解析失败，返回None
-            logger.debug(f"无法解析日期字符串: {pub_date}")
+            logger.debug(f"无法解析日期字符串: {pub_date}, 错误: {str(e)}")
             return None
     
     def _create_html_digest(self, sorted_contents: List[Dict[str, Any]], 
