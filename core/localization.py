@@ -297,6 +297,8 @@ For the full article, please click the "Read Original" link.""",
         "no_log_file": "No log file available",
         "log_file_not_found": "Log file not found",
         "status_bar_test": "Status bar test",
+        "open_with_default_app": "Open with default app",
+        "view_latest_logs": "View latest logs",
         
         # Add version-related translations
         "version": "Version",
@@ -587,6 +589,8 @@ For the full article, please click the "Read Original" link.""",
         "no_log_file": "暂无可用的日志文件",
         "log_file_not_found": "找不到日志文件",
         "status_bar_test": "状态栏测试",
+        "open_with_default_app": "使用默认应用打开",
+        "view_latest_logs": "查看最新日志",
         
         # Add version-related translations
         "version": "版本",

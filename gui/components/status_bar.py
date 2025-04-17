@@ -1,5 +1,5 @@
-from PyQt6.QtWidgets import QStatusBar, QLabel, QPushButton, QHBoxLayout, QWidget, QMessageBox
-from PyQt6.QtCore import QTimer, Qt, QCoreApplication
+from PyQt6.QtWidgets import QStatusBar, QLabel, QPushButton, QHBoxLayout, QWidget, QMessageBox, QMenu
+from PyQt6.QtCore import QTimer, Qt, QCoreApplication, QPoint
 from core.status_manager import StatusManager
 from core.task_status import TaskStatus
 from core.localization import get_text
@@ -194,7 +194,22 @@ class CustomStatusBar(QStatusBar):
                 get_text("log_file_not_found")
             )
             return
-            
+        
+        # Create a menu with viewing options
+        menu = QMenu(self)
+        default_action = menu.addAction(get_text("open_with_default_app"))
+        latest_action = menu.addAction(get_text("view_latest_logs"))
+        
+        # Show menu at button position
+        action = menu.exec(self.log_button.mapToGlobal(QPoint(0, self.log_button.height())))
+        
+        if action == default_action:
+            self._open_with_default_app(log_file)
+        elif action == latest_action:
+            self._open_with_terminal(log_file)
+    
+    def _open_with_default_app(self, log_file):
+        """Open log file with the system default application"""
         import sys
         import subprocess
         
@@ -205,6 +220,32 @@ class CustomStatusBar(QStatusBar):
                 subprocess.run(['start', str(log_file)], shell=True)
             else:  # Linux
                 subprocess.run(['xdg-open', str(log_file)])
+        except Exception as e:
+            QMessageBox.warning(
+                self.parent(),
+                get_text("error"),
+                f"{get_text('error_opening_log')}: {str(e)}"
+            )
+    
+    def _open_with_terminal(self, log_file):
+        """Open log file in terminal, showing the latest entries"""
+        import sys
+        import subprocess
+        
+        try:
+            if sys.platform == 'darwin':  # macOS
+                # Use Terminal with tail -f to show latest logs
+                script = f'tell application "Terminal" to do script "tail -f \\"{str(log_file)}\\""'
+                subprocess.run(['osascript', '-e', script])
+            elif sys.platform == 'win32':  # Windows
+                # Open command prompt with tail equivalent
+                subprocess.run(f'start cmd.exe /k "type {str(log_file)} & echo. & echo Watching for changes... & timeout /t 1 /nobreak > nul & goto start"', shell=True)
+            else:  # Linux
+                # Use xterm or default terminal
+                try:
+                    subprocess.run(['gnome-terminal', '--', 'bash', '-c', f'tail -f "{str(log_file)}"; read -p "Press Enter to exit..."'])
+                except FileNotFoundError:
+                    subprocess.run(['xterm', '-e', f'tail -f "{str(log_file)}"; read -p "Press Enter to exit..."'])
         except Exception as e:
             QMessageBox.warning(
                 self.parent(),
