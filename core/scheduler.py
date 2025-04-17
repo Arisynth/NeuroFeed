@@ -147,15 +147,33 @@ def _execute_task(task_id=None):
     if task_id and task_id in _task_status_map:
         task_state_id = _task_status_map[task_id]
         logger.info(f"使用已有的状态任务ID: {task_state_id} 用于任务 {task_id}")
+        
+        # 获取当前任务状态，确保进度不会倒退
+        current_state = status_manager.get_task_state(task_state_id)
+        current_progress = current_state.progress if current_state else 0
     else:
         task_state_id = status_manager.create_task(get_text("rss_feeds"))
         logger.info(f"创建新的状态任务ID: {task_state_id}")
         if task_id:
             _task_status_map[task_id] = task_state_id
+        current_progress = 0
     
-    status_manager.update_task(task_state_id, 
-                             status=TaskStatus.RUNNING,
-                             message=get_text("loading_task_config") if get_text("loading_task_config") != "loading_task_config" else "正在加载任务配置...")
+    # 获取当前进度，确保后续更新不会导致进度倒退
+    current_state = status_manager.get_task_state(task_state_id)
+    if current_state and current_state.progress > current_progress:
+        current_progress = current_state.progress
+        
+    # 确保进度不会倒退 - 只有当新进度大于当前进度时才更新
+    def update_progress_safely(message, new_progress):
+        nonlocal current_progress
+        if new_progress > current_progress:
+            current_progress = new_progress
+            status_manager.update_task(task_state_id, status=TaskStatus.RUNNING, message=message, progress=current_progress)
+        else:
+            # 只更新消息，保持当前进度
+            status_manager.update_task(task_state_id, status=TaskStatus.RUNNING, message=message)
+    
+    update_progress_safely(get_text("loading_task_config") if get_text("loading_task_config") != "loading_task_config" else "正在加载任务配置...", 10)
     
     # 加载配置和任务
     config = load_config()
@@ -200,7 +218,7 @@ def _execute_task(task_id=None):
             return
     
     # 初始化RSS解析器、内容过滤器和摘要生成器
-    status_manager.update_task(task_state_id, message=get_text("initializing_services") if get_text("initializing_services") != "initializing_services" else "正在初始化服务...")
+    update_progress_safely(get_text("initializing_services") if get_text("initializing_services") != "initializing_services" else "正在初始化服务...", 15)
     rss_parser = RssParser()
     # 确保使用最新配置
     is_skipping = rss_parser.refresh_settings()
@@ -209,7 +227,7 @@ def _execute_task(task_id=None):
     try:
         content_filter = ContentFilter(config)
         summarizer = NewsSummarizer(config)
-        status_manager.update_task(task_state_id, progress=10)
+        update_progress_safely(get_text("initializing_services") if get_text("initializing_services") != "initializing_services" else "初始化服务完成...", 20)
     except Exception as e:
         status_manager.update_task(task_state_id,
                                  status=TaskStatus.FAILED,
@@ -222,10 +240,9 @@ def _execute_task(task_id=None):
     total_tasks = len(tasks)
     for task_index, task in enumerate(tasks):
         try:
-            current_progress = 10 + (task_index / total_tasks * 90)  # 10%-100%
-            status_manager.update_task(task_state_id,
-                                     message=f"处理任务: {task.name}",
-                                     progress=int(current_progress))
+            # 修改进度计算逻辑，确保进度不会倒退
+            new_progress = max(20 + (task_index / total_tasks * 60), current_progress)  # 20%-80%
+            update_progress_safely(f"处理任务: {task.name}", int(new_progress))
             
             logger.info(f"\n=====================================================")
             logger.info(f"开始处理任务: {task.name} (ID: {task.task_id})")
@@ -306,7 +323,7 @@ def _execute_task(task_id=None):
             logger.info(f"总条目数: {total_items}")
             
             # 收集所有内容
-            status_manager.update_task(task_state_id, message=get_text("fetching_rss_content") if get_text("fetching_rss_content") != "fetching_rss_content" else "正在获取RSS内容...")
+            update_progress_safely(get_text("fetching_rss_content") if get_text("fetching_rss_content") != "fetching_rss_content" else "正在获取RSS内容...", max(int(new_progress + 15), current_progress))
             all_contents = []
             logger.info(f"\n============ 整合内容 ============")
             for feed_url, result in feed_results.items():
@@ -342,16 +359,14 @@ def _execute_task(task_id=None):
             logger.info(f"待过滤内容总数: {len(all_contents)}")
             logger.info(f"AI模型: {content_filter.ollama_model or content_filter.openai_model}")
             
-            # RSS获取完成后更新进度
-            status_manager.update_task(task_state_id, 
-                                     message=get_text("ai_content_filtering") if get_text("ai_content_filtering") != "ai_content_filtering" else "正在进行AI内容过滤...",
-                                     progress=int(current_progress + 30))
+            # RSS获取完成后更新进度 - 使用update_progress_safely
+            update_progress_safely(get_text("ai_content_filtering") if get_text("ai_content_filtering") != "ai_content_filtering" else "正在进行AI内容过滤...", 
+                               max(int(new_progress + 30), current_progress))
             
             try:
                 kept_contents, discarded_contents = content_filter.filter_content_batch(all_contents)
-                status_manager.update_task(task_state_id,
-                                         message=get_text("generating_content_summary") if get_text("generating_content_summary") != "generating_content_summary" else "正在生成内容摘要...",
-                                         progress=int(current_progress + 60))
+                update_progress_safely(get_text("generating_content_summary") if get_text("generating_content_summary") != "generating_content_summary" else "正在生成内容摘要...", 
+                                   max(int(new_progress + 45), current_progress))
                 
                 # 标记丢弃的内容为已处理 - 使用新的任务特定标记
                 for content in discarded_contents:
@@ -433,9 +448,8 @@ def _execute_task(task_id=None):
             
             # 如果有收件人，则发送邮件
             if kept_contents and task.recipients:
-                status_manager.update_task(task_state_id,
-                                         message=get_text("sending_emails") if get_text("sending_emails") != "sending_emails" else "正在发送邮件...",
-                                         progress=int(current_progress + 80))
+                update_progress_safely(get_text("sending_emails") if get_text("sending_emails") != "sending_emails" else "正在发送邮件...", 
+                                   max(int(new_progress + 60), current_progress))
                 
                 logger.info(f"\n============ 开始发送邮件 ============")
                 logger.info(f"任务: {task.name}")

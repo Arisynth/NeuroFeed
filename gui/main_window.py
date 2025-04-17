@@ -170,10 +170,14 @@ class MainWindow(QMainWindow):
                 status_task_id = task_result['status_task_id']
                 print(f"Task queued with status tracking ID: {status_task_id}")
             
-            # 向用户显示任务已经开始的提示
-            QMessageBox.information(self, get_text("task_started"), 
-                                  f"{get_text('task_started_message')} '{task.name}'\n\n"
-                                  f"{get_text('task_started_note')}")
+            # 使用托盘图标显示非阻塞通知，替代弹窗
+            if self.tray_icon and self.tray_icon.isSystemTrayAvailable():
+                self.tray_icon.showMessage(
+                    get_text("task_started"),
+                    f"{get_text('task_started_message')} '{task.name}'",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    3000  # 显示3秒
+                )
             
             # 由于任务在后台线程执行，这里只更新UI状态
             task.update_task_run()
@@ -182,7 +186,7 @@ class MainWindow(QMainWindow):
             # 立即更新调度器UI以显示最新的运行时间和下次运行时间
             self.scheduler_manager.update_scheduler_ui()
             
-            # 确保状态栏显示已经开始的任务状态
+            # 确保状态栏显示已经开始的任务状态 - 移到这里，避免被弹窗阻断
             self.status_manager.update_task(
                 status_task_id,
                 status=TaskStatus.RUNNING,

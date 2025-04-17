@@ -63,6 +63,8 @@ class CustomStatusBar(QStatusBar):
         
         # Initialize with empty state
         self.current_message = ""
+        self.highest_progress = 0  # Track the highest progress seen
+        self.task_progress = {}    # Track progress per task ID
     
     def _connect_signals(self):
         """Connect to signals after a delay to prevent recursion issues"""
@@ -112,6 +114,30 @@ class CustomStatusBar(QStatusBar):
         
         self.current_message = task_state.message
         
+        # Track task-specific progress to prevent regression
+        if task_state.task_id not in self.task_progress:
+            self.task_progress[task_state.task_id] = 0
+            
+        # Ensure progress never goes backward
+        if task_state.progress < self.task_progress[task_state.task_id]:
+            logger.warning(f"Preventing progress regression for task {task_state.task_id}: "
+                          f"{task_state.progress}% < {self.task_progress[task_state.task_id]}%")
+            progress_to_show = self.task_progress[task_state.task_id]
+        else:
+            progress_to_show = task_state.progress
+            self.task_progress[task_state.task_id] = progress_to_show
+            
+        # Also track overall highest progress for consistency
+        if progress_to_show > self.highest_progress and task_state.status == TaskStatus.RUNNING:
+            self.highest_progress = progress_to_show
+        
+        # Reset highest progress when a task completes
+        if task_state.status in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELED]:
+            self.highest_progress = 0
+            # Also clean up task progress tracking
+            if task_state.task_id in self.task_progress:
+                del self.task_progress[task_state.task_id]
+        
         # Handle animation and colors based on status
         if task_state.status == TaskStatus.RUNNING:
             if not self.animation_timer.isActive():
@@ -129,8 +155,8 @@ class CustomStatusBar(QStatusBar):
             self.status_label.setStyleSheet("")
             
         # Update progress
-        if task_state.progress > 0:
-            self.progress_label.setText(f"{task_state.progress}%")
+        if progress_to_show > 0:
+            self.progress_label.setText(f"{progress_to_show}%")
         else:
             self.progress_label.clear()
             
