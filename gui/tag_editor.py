@@ -108,7 +108,7 @@ class TagWidget(QFrame):
         # 更新样式 - 调整透明度为80%
         self.setStyleSheet("""
             QFrame {
-                background-color: rgba(30, 30, 30, 0.6);  /* 修改透明度为80% */
+                background-color: rgba(30, 30, 30, 0.6);  /* 修改透明度为60% */
                 color: white;
                 border-radius: 4px;
                 padding: 2px;
@@ -116,17 +116,17 @@ class TagWidget(QFrame):
                 font-weight: bold;
             }
             QFrame:hover {
-                background-color: rgba(45, 45, 45, 0.9);  /* 修改透明度为80% */
+                background-color: rgba(45, 45, 45, 0.9);  /* 修改透明度为90% */
             }
             QPushButton {
                 border: none;
-                color: rgba(255, 255, 255, 0.6);  /* 保持80%透明度 */
+                color: rgba(255, 255, 255, 0.6);  /* 保持60%透明度 */
                 background: transparent;
                 padding: 0px 2px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                color: rgba(255, 0, 0, 0.9);  /* 修改为80%透明度 */
+                color: rgba(255, 0, 0, 0.9);  /* 修改为90%透明度 */
             }
             QLabel {
                 color: white;
@@ -200,16 +200,22 @@ class TagEditor(QWidget):
         
         # Tags area with flow layout for wrapping
         self.tags_container = QWidget()
+        # 确保标签容器可以自由扩展高度，但首选按宽度约束
+        self.tags_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        
         self.tags_layout = QFlowLayout(self.tags_container)
         self.tags_layout.setSpacing(4)
         
-        # Add a scroll area to contain tags
+        # Add a scroll area to contain tags - 改进滚动区域配置
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         
-        # Set the height based on the number of rows (approximately 40px per row)
+        # 设置滚动区域Frame样式为无边框，更美观
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        
+        # 设置高度基于rows参数，但允许在必要时滚动
         scroll_area.setMinimumHeight(40 * rows)
         scroll_area.setWidget(self.tags_container)
         
@@ -234,6 +240,10 @@ class TagEditor(QWidget):
         tag_widget.delete_clicked.connect(self.remove_tag)
         
         self.tags_layout.addWidget(tag_widget)
+        
+        # 强制更新标签容器的布局，确保滚动条正确响应
+        self.tags_container.updateGeometry()
+        
         self.tags_changed.emit(self.tags)
     
     def remove_tag(self, tag):
@@ -247,6 +257,9 @@ class TagEditor(QWidget):
                 if isinstance(widget, TagWidget) and widget.tag_text == tag:
                     widget.setParent(None)
                     break
+            
+            # 强制更新标签容器的布局，确保滚动条正确响应
+            self.tags_container.updateGeometry()
             
             self.tags_changed.emit(self.tags)
     
@@ -273,5 +286,8 @@ class TagEditor(QWidget):
             widget = item.widget()
             if widget:
                 widget.setParent(None)
+        
+        # 强制更新标签容器的布局，确保滚动条正确响应
+        self.tags_container.updateGeometry()
         
         self.tags_changed.emit(self.tags)
