@@ -38,11 +38,15 @@ def process_task_queue():
     global is_task_running
     
     logger.info("任务队列处理线程已启动")
+    is_idle = False  # 新增：追踪空闲状态
     
     while True:
         try:
             # 从队列获取下一个任务
             task_id = task_queue.get(block=True, timeout=300)  # 5分钟超时
+            
+            # 有任务执行，重置空闲状态
+            is_idle = False
             
             with task_lock:
                 is_task_running = True
@@ -89,7 +93,10 @@ def process_task_queue():
             
         except queue.Empty:
             # 队列超时，但继续等待
-            logger.info("任务队列空闲5分钟，继续等待新任务...")
+            if not is_idle:
+                # 仅在首次进入空闲状态时记录日志
+                logger.info("任务队列空闲，等待新任务...")
+                is_idle = True
             continue
             
         except Exception as e:
