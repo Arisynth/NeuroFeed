@@ -29,7 +29,7 @@ class MainWindow(QMainWindow):
         init_localization()
         
         # Get application name and version
-        self.app_name = "NeuroFeed"
+        self.app_name = get_text("app_name")  # Use localized app name
         self.app_version = get_app_version()
         
         # Set window title with version
@@ -63,13 +63,10 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
         
-        # Add title label
-        title_label = QLabel("NewsDigest - RSS Feed Aggregator")
-        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title_label.setStyleSheet("font-size: 18px; font-weight: bold; margin-bottom: 15px;")
-        main_layout.addWidget(title_label)
+        # Add some top margin to improve spacing
+        main_layout.setContentsMargins(10, 15, 10, 10)
         
-        # Create task manager
+        # Create task manager with improved top spacing
         self.task_manager = TaskManager()
         self.task_manager.task_changed.connect(self.on_task_changed)
         main_layout.addWidget(self.task_manager)

@@ -105,10 +105,10 @@ class TagWidget(QFrame):
         super().__init__(parent)
         self.tag_text = tag_text
         
-        # 更新样式 - 颜色更深更黑
+        # 更新样式 - 调整透明度为80%
         self.setStyleSheet("""
             QFrame {
-                background-color: rgba(30, 30, 30, 0.85);  /* 更深的黑色 */
+                background-color: rgba(30, 30, 30, 0.6);  /* 修改透明度为80% */
                 color: white;
                 border-radius: 4px;
                 padding: 2px;
@@ -116,17 +116,17 @@ class TagWidget(QFrame):
                 font-weight: bold;
             }
             QFrame:hover {
-                background-color: rgba(45, 45, 45, 0.9);  /* 悬停时略微亮一点 */
+                background-color: rgba(45, 45, 45, 0.9);  /* 修改透明度为80% */
             }
             QPushButton {
                 border: none;
-                color: rgba(255, 255, 255, 0.8);
+                color: rgba(255, 255, 255, 0.6);  /* 保持80%透明度 */
                 background: transparent;
                 padding: 0px 2px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                color: rgba(255, 0, 0, 0.9);  /* 红色删除按钮 */
+                color: rgba(255, 0, 0, 0.9);  /* 修改为80%透明度 */
             }
             QLabel {
                 color: white;

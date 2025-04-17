@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 _translations = {
     # English translations
     "en": {
+        # App name and title
+        "app_name": "NeuroFeed",
+        "app_title": "NeuroFeed - RSS Feed Aggregator",
+        
         # General UI elements
         "settings": "Settings",
         "save": "Save",
@@ -301,6 +305,10 @@ For the full article, please click the "Read Original" link.""",
     
     # Chinese translations
     "zh": {
+        # App name and title
+        "app_name": "智阅聚合",
+        "app_title": "智能RSS订阅聚合器",
+        
         # General UI elements
         "settings": "设置",
         "save": "保存",
