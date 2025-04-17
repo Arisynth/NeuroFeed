@@ -225,6 +225,20 @@ class ContentFilter:
 请只返回JSON格式的评估结果，严格遵守要求中定义的JSON格式，不要有任何其他文本。
 """
     
+    def _clean_thinking_process(self, text: str) -> str:
+        """清除AI推理模型中的思考过程（被<think></think>包裹的内容）
+        
+        Args:
+            text: AI响应文本
+            
+        Returns:
+            清除思考过程后的文本
+        """
+        import re
+        # 使用非贪婪匹配移除所有<think>...</think>标记之间的内容
+        cleaned_text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+        return cleaned_text
+    
     def _parse_evaluation(self, evaluation_text: str) -> Dict[str, Any]:
         """解析AI评估结果
         
@@ -241,16 +255,21 @@ class ContentFilter:
         logger.info(f"\n============ AI响应内容 ============")
         logger.info(f"AI响应原文 ({len(evaluation_text)} 字符):\n{evaluation_text}\n")
         
+        # 清除可能存在的思考过程
+        cleaned_text = self._clean_thinking_process(evaluation_text)
+        if cleaned_text != evaluation_text:
+            logger.info(f"检测到并清理了AI思考过程，清理后长度: {len(cleaned_text)} 字符")
+        
         try:
-            # 首先尝试直接解析
-            result = self.ai_service.parse_json_response(evaluation_text)
+            # 使用清理后的文本进行解析
+            result = self.ai_service.parse_json_response(cleaned_text)
         except Exception as e:
             # 如果解析失败，尝试修复常见的JSON错误
             logger.warning(f"初次解析JSON失败: {str(e)}，尝试修复JSON...")
             
             try:
                 # 尝试修复缺少结束大括号的问题
-                fixed_json = evaluation_text.strip()
+                fixed_json = cleaned_text.strip()
                 # 统计左右大括号数量
                 open_braces = fixed_json.count('{')
                 close_braces = fixed_json.count('}')
@@ -269,10 +288,10 @@ class ContentFilter:
                 
                 try:
                     # 尝试找到JSON的开始和结束位置
-                    start_idx = evaluation_text.find('{')
+                    start_idx = cleaned_text.find('{')
                     if start_idx != -1:
                         # 从找到的第一个 { 开始尝试解析
-                        potential_json = evaluation_text[start_idx:]
+                        potential_json = cleaned_text[start_idx:]
                         # 确保JSON对象完整
                         open_count = 0
                         for i, char in enumerate(potential_json):

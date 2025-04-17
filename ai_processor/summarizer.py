@@ -164,6 +164,12 @@ class NewsSummarizer:
             # 调用AI
             response = self.ai_service.call_ai(prompt, max_retries=2)
             
+            # 清除可能的思考过程
+            cleaned_response = self._clean_thinking_process(response)
+            if cleaned_response != response:
+                logger.info(f"在简化标题过程中检测到并清理了AI思考过程")
+                response = cleaned_response
+            
             # 处理AI响应
             short_title = response.strip()
             
@@ -221,6 +227,19 @@ class NewsSummarizer:
         # 复用语言匹配检测功能
         return self._is_language_match(text, "zh")
     
+    def _clean_thinking_process(self, text: str) -> str:
+        """清除AI推理模型中的思考过程（被<think></think>包裹的内容）
+        
+        Args:
+            text: AI响应文本
+            
+        Returns:
+            清除思考过程后的文本
+        """
+        # 使用非贪婪匹配移除所有<think>...</think>标记之间的内容
+        cleaned_text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+        return cleaned_text
+    
     def _generate_ai_summary(self, content: Dict[str, Any]) -> str:
         """使用AI生成新闻简报
         
@@ -252,6 +271,12 @@ class NewsSummarizer:
         
         # 调用AI
         response = self.ai_service.call_ai(prompt, max_retries=2)
+        
+        # 清除可能的思考过程
+        cleaned_response = self._clean_thinking_process(response)
+        if cleaned_response != response:
+            logger.info(f"检测到并清理了AI思考过程，清理前长度: {len(response)} 字符，清理后: {len(cleaned_response)} 字符")
+            response = cleaned_response
         
         # Log part of the AI response to see what language it's responding in
         response_preview = response[:200] + "..." if len(response) > 200 else response
