@@ -49,6 +49,8 @@ class EmailSender:
         
         # 获取当前语言设置
         self.language = get_current_language()
+        # Determine the app name based on language
+        self.app_name = "智阅聚合" if self.language == "zh" else "NeuroFeed"
     
     def send_digest(self, task_name: str, contents: List[Dict[str, Any]], 
                     recipients: List[str]) -> Dict[str, Dict[str, Any]]:
@@ -77,8 +79,8 @@ class EmailSender:
         else:
             current_date = datetime.now().strftime("%Y-%m-%d")
             
-        # Use localized text for email subject
-        subject = f"NewsDigest - {task_name} {get_text('digest_subtitle')} ({current_date})"
+        # Use localized text for email subject, including the app name
+        subject = f"{self.app_name} - {task_name} {get_text('digest_subtitle')} ({current_date})"
         
         # 创建HTML邮件内容
         html_content = self._create_html_digest(sorted_contents, task_name, current_date)
@@ -321,18 +323,18 @@ class EmailSender:
         </style>
         """
         
-        # 构建HTML头部
+        # 构建HTML头部 using the localized app name
         html = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="UTF-8">
-            <title>NewsDigest - {task_name}</title>
+            <title>{self.app_name} - {task_name}</title>
             {css_styles}
         </head>
         <body>
             <div class="header">
-                <h1>NewsDigest - {task_name}</h1>
+                <h1>{self.app_name} - {task_name}</h1>
                 <p>{date_str} {get_text("digest_subtitle")}</p>
             </div>
             <div class="news-section">

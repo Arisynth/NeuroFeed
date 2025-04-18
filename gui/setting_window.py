@@ -172,6 +172,13 @@ class SettingsWindow(QDialog):
         
         email_layout.addWidget(smtp_group)
         email_layout.addWidget(auth_group)
+
+        # Add SMTP password help text
+        smtp_help_label = QLabel(get_text("smtp_password_help"))
+        smtp_help_label.setWordWrap(True)
+        smtp_help_label.setStyleSheet("color: #666; font-size: 11px; padding-top: 5px;")
+        email_layout.addWidget(smtp_help_label)
+        
         email_layout.addStretch()
         
         self.tabs.addTab(email_tab, get_text("email"))

@@ -38,6 +38,7 @@ _translations = {
         "sender_email": "Sender Email",
         "password": "Password",
         "remember_password": "Remember password",
+        "smtp_password_help": "Note: Due to enhanced security, many email providers (like Gmail, Outlook) require using an 'App Password' instead of your regular account password for SMTP authentication. Please check your email provider's website for instructions on how to generate one.",
         
         # Email template translations for English
         "email_test_subject": "NewsDigest - Test Email",
@@ -330,6 +331,7 @@ For the full article, please click the "Read Original" link.""",
         "sender_email": "发件人邮箱",
         "password": "密码",
         "remember_password": "记住密码",
+        "smtp_password_help": "提示：随着SMTP服务安全性的升级，许多邮箱提供商要求使用“应用专用密码”而非您的常规账户密码进行SMTP认证。具体操作请登录邮箱提供商网站查询。推荐使用163、139邮箱。",
         
         # Email template translations for Chinese
         "email_test_subject": "NewsDigest - 测试邮件",
