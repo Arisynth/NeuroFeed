@@ -254,7 +254,7 @@ class MainWindow(QMainWindow):
         if not self.really_quit and minimize_to_tray and self.tray_icon:
             # 显示气泡提示消息
             self.tray_icon.showMessage(
-                "NewsDigest",
+                "NeuroFeed",
                 get_text("app_minimized_to_tray"),
                 QSystemTrayIcon.MessageIcon.Information,
                 2000  # 显示2秒
