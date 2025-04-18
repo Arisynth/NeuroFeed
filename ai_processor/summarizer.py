@@ -369,7 +369,7 @@ class NewsSummarizer:
             # Make English requirement more explicit
             prompt = f"""Please provide an {style_description} summary of the following news article IN ENGLISH ONLY. 
 
-Regardless of the original language of the article, your summary MUST be in English.
+Regardless of the original language of the article, your summary **MUST be in English**.
 The summary should help readers quickly understand the main content of the article.
 
 {"If the original title is not in English, please translate it into English and include it as 'Title: [translated title]'" if not title_matches_language else "The title is already in English, no need to translate it."}
@@ -378,11 +378,12 @@ Please follow these requirements:
 1. Output MUST be in English only, never in Chinese or any other language
 2. Include the core information and main points of the article
 3. Use clear and concise language
-4. All content must be based on the original text
+4. **All content must be based on the original text**
 5. Do not use phrases like "News Summary" or "In summary" as opening words
 6. Do not include closing phrases like "End of summary"
 7. Do not include metadata such as date or source
-8. Output the English summary directly without explanations
+8. Avoid hallucination, make sure that the output is reliable and accurate
+9. Output the English summary directly without explanations
 
 Title: {title}
 
@@ -401,12 +402,13 @@ Content:
 请遵循以下要求：
 1. 摘要应包含文章的核心信息和要点，保持完整性和可读性
 2. 语言简洁清晰，不要过于冗长
-3. 所有内容必须基于原文，不要添加未在原文中提及的信息
+3. **所有内容必须基于原文，严禁添加未在原文中提及的信息**
 4. 不要使用"新闻简报"、"摘要"、"总结"等词作为开头
 5. 不要包含"简报结束"、"以上就是..."等作为结尾
 6. 不要包含当前日期、来源信息、参考链接等元数据
 7. 直接输出中文摘要内容，不要添加额外的解释或说明
-8. 请严格遵守以上要求，确保生成的摘要符合预期
+8. 避免幻觉（hallucination），确保摘要内容真实可靠
+9. 请严格遵守以上要求，确保生成的摘要符合预期
 
 标题：{title}
 
