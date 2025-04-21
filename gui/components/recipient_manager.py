@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, 
                            QTableWidgetItem, QHeaderView, QPushButton, QLabel,
                            QMessageBox, QInputDialog)
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QColor
 from datetime import datetime
 from core.localization import get_text, get_formatted
@@ -187,3 +187,13 @@ class RecipientManager(QWidget):
         """Refreshes the recipient list display."""
         logger.debug(f"Refreshing recipient table for task: {self.current_task.name if self.current_task else 'None'}")
         self.update_recipient_table()
+
+    @pyqtSlot(str, str)
+    def refresh_for_unsubscribe(self, task_id: str, email: str):
+        """Slot to refresh the recipient list if the unsubscribe affects the current task."""
+        logger.info(f"RecipientManager received unsubscribe signal for task {task_id}, email {email}")
+        if self.current_task and self.current_task.task_id == task_id:
+            logger.info(f"Unsubscribe affects current task ({task_id}). Refreshing recipient list.")
+            self.update_recipient_table()
+        else:
+            logger.info(f"Unsubscribe does not affect current task ({self.current_task.task_id if self.current_task else 'None'}). No UI refresh needed now.")

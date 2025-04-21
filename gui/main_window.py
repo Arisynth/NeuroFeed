@@ -123,6 +123,14 @@ class MainWindow(QMainWindow):
             logger.error(f"Error connecting unsubscribe handler or tab signals: {e}", exc_info=True)
         # --- End Connection ---
         
+        # Connect unsubscribe signal to recipient manager refresh slot
+        try:
+            unsubscribe_handler = get_unsubscribe_handler()
+            unsubscribe_handler.unsubscribe_processed.connect(self.recipient_manager.refresh_for_unsubscribe)
+            logger.info("Connected unsubscribe_processed signal to RecipientManager refresh slot.")
+        except Exception as e:
+            logger.error(f"Failed to connect unsubscribe signal: {e}")
+
         # 一定要初始化任务，否则组件不会显示任务信息
         if self.task_manager.current_task:
             self.on_task_changed(self.task_manager.current_task)
@@ -141,7 +149,7 @@ class MainWindow(QMainWindow):
     def handle_tab_changed(self, index):
         """Called when the current tab is changed."""
         current_widget = self.tabs.widget(index)
-        if current_widget == self.recipient_manager:
+        if (current_widget == self.recipient_manager):
             logger.info("Recipients tab selected. Refreshing recipient list.")
             self.recipient_manager.refresh_recipients()
         # else:
