@@ -44,10 +44,11 @@ class SettingsWindow(QDialog):
         
         # Main layout
         main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(10) # Add spacing between widgets (tabs, status, buttons)
         
         # Create tab widget
         self.tabs = QTabWidget()
-        self.tabs.setMinimumHeight(630)  # Set minimum height for the tab widget
+        self.tabs.setMinimumHeight(625)  # Set minimum height for the tab widget
         
         # Email settings tab
         self.create_email_tab()
@@ -987,8 +988,9 @@ class SettingsWindow(QDialog):
                 get_text("restart_required")
             )
         
+        # 显示保存成功提示，移除上边距和内边距样式
         self.status_label.setText(get_text("settings_saved"))
-        self.status_label.setStyleSheet("color: green;")
+        self.status_label.setStyleSheet("color: green;") # Keep only color style
         
         # 3秒后清除提示
         QTimer.singleShot(5000, self.clear_status)
