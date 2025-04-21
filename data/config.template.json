@@ -47,7 +47,14 @@
             "smtp_security": "SSL/TLS",
             "sender_email": "sender@example.com",
             "email_password": "",
-            "remember_password": false
+            "remember_password": false,
+            "imap_settings": {
+                "server": "imap.example.com",
+                "port": 993,
+                "security": "SSL/TLS",
+                "username": "sender@example.com",
+                "password": ""
+            }
         },
         "ai_settings": {
             "provider": "ollama",

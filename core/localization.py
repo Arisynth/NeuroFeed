@@ -39,7 +39,13 @@ _translations = {
         "password": "Password",
         "remember_password": "Remember password",
         "smtp_password_help": "Note: Due to enhanced security, many email providers (like Gmail, Outlook) require using an 'App Password' instead of your regular account password for SMTP authentication. Please check your email provider's website for instructions on how to generate one.",
-        
+        "smtp_server_settings_outgoing": "SMTP Server Settings (Outgoing Mail)", # Added for clarity
+        "imap_server_settings_incoming": "IMAP Server Settings (Incoming Mail)", # New key
+        "imap_server": "IMAP Server", # New key
+        "imap_settings_purpose": "Configure IMAP settings to allow NeuroFeed to check for replies or interactions with sent digests (feature under development).", # New key
+        "username": "Username", # New key (can be reused)
+        "use_smtp_credentials_for_imap": "Use same username and password for IMAP", # New key
+
         # Email template translations for English
         "email_test_subject": "NeuroFeed - Test Email",
         "email_test_header": "NeuroFeed Test Email",
@@ -309,7 +315,7 @@ For the full article, please click the "Read Original" link.""",
     # Chinese translations
     "zh": {
         # App name and title
-        "app_name": "智阅聚合",
+        "app_name": "NeuroFeed",
         "app_title": "智能RSS订阅聚合器",
         
         # General UI elements
@@ -331,11 +337,17 @@ For the full article, please click the "Read Original" link.""",
         "sender_email": "发件人邮箱",
         "password": "密码",
         "remember_password": "记住密码",
-        "smtp_password_help": "提示：随着SMTP服务安全性的升级，许多邮箱提供商要求使用“应用专用密码”而非您的常规账户密码进行SMTP认证。具体操作请登录邮箱提供商网站查询。推荐使用163、139邮箱。",
-        
+        "smtp_password_help": "提示：许多邮箱提供商要求使用“应用专用密码”而非您的常规账户密码进行SMTP认证,请登录邮箱提供商网站查询具体信息。推荐使用163邮箱。",
+        "smtp_server_settings_outgoing": "SMTP服务器设置 (发送邮件)", # Added for clarity
+        "imap_server_settings_incoming": "IMAP服务器设置 (接收邮件)", # New key
+        "imap_server": "IMAP服务器", # New key
+        "imap_settings_purpose": "配置IMAP设置以允许NeuroFeed接收退订邮件", # New key
+        "username": "用户名", # New key (can be reused)
+        "use_smtp_credentials_for_imap": "IMAP使用与SMTP相同的用户名和密码", # New key
+
         # Email template translations for Chinese
-        "email_test_subject": "智阅聚合 - 测试邮件",
-        "email_test_header": "智阅聚合 测试邮件",
+        "email_test_subject": "NeuroFeed - 测试邮件",
+        "email_test_header": "NeuroFeed 测试邮件",
         "email_test_content1": "这是一封测试邮件，用于验证您的邮件配置。",
         "email_test_content2": "如果您收到这封邮件，说明您的邮件服务配置成功！",
         "email_test_success": "测试邮件发送成功",
@@ -348,8 +360,8 @@ For the full article, please click the "Read Original" link.""",
         "source": "来源",
         "publish_time": "发布时间",
         "read_original": "阅读原文",
-        "digest_footer": """此邮件由智阅聚合AI自动生成。
-新闻内容均总结自原文，观点和立场不代表智阅聚合。
+        "digest_footer": """此邮件由NeuroFeed AI总结生成。
+新闻内容均总结自原文，观点和立场不代表NeuroFeed。
 如需阅读完整文章，请点击"阅读原文"链接。""",
         
         # AI settings

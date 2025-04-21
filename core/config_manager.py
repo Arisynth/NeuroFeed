@@ -55,7 +55,14 @@ def initialize_config():
                         "smtp_security": "SSL/TLS",
                         "sender_email": "",
                         "email_password": "",
-                        "remember_password": False
+                        "remember_password": False,
+                        "imap_settings": {  # Add IMAP defaults
+                            "server": "",
+                            "port": 993,
+                            "security": "SSL/TLS",
+                            "username": "",
+                            "password": ""
+                        }
                     },
                     "ai_settings": {
                         "provider": "ollama",
@@ -94,7 +101,14 @@ def load_config():
                 "smtp_security": "SSL/TLS",
                 "sender_email": "",
                 "email_password": "",
-                "remember_password": False
+                "remember_password": False,
+                "imap_settings": {  # Add IMAP defaults
+                    "server": "",
+                    "port": 993,
+                    "security": "SSL/TLS",
+                    "username": "",
+                    "password": ""
+                }
             },
             "ai_settings": {
                 "provider": "ollama",
@@ -137,7 +151,21 @@ def load_config():
                             for sub_key, sub_value in value.items():
                                 if sub_key not in loaded_config["global_settings"][key]:
                                     loaded_config["global_settings"][key][sub_key] = sub_value
-                
+                                # Ensure IMAP settings structure exists and is complete
+                                elif key == "email_settings" and sub_key == "imap_settings" and isinstance(sub_value, dict):
+                                    if "imap_settings" not in loaded_config["global_settings"]["email_settings"]:
+                                        loaded_config["global_settings"]["email_settings"]["imap_settings"] = sub_value
+                                    elif isinstance(loaded_config["global_settings"]["email_settings"]["imap_settings"], dict):
+                                        # Remove check_interval_minutes if it exists from old configs
+                                        loaded_config["global_settings"]["email_settings"]["imap_settings"].pop("check_interval_minutes", None)
+                                        for imap_key, imap_default in sub_value.items():
+                                            if imap_key not in loaded_config["global_settings"]["email_settings"]["imap_settings"]:
+                                                loaded_config["global_settings"]["email_settings"]["imap_settings"][imap_key] = imap_default
+                                    else: # If imap_settings exists but is not a dict, replace it
+                                        loaded_config["global_settings"]["email_settings"]["imap_settings"] = sub_value
+                                        # Ensure interval is removed if replaced
+                                        loaded_config["global_settings"]["email_settings"]["imap_settings"].pop("check_interval_minutes", None)
+
                 return loaded_config
         
         # If file doesn't exist or is empty, return the default config

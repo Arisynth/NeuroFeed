@@ -14,7 +14,7 @@ class SettingsWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(get_text("settings"))
-        self.setMinimumSize(500, 400)
+        self.setMinimumSize(500, 500)
         
         # 添加样式表确保下拉列表字体一致，添加复选框样式修正
         self.setStyleSheet("""
@@ -47,6 +47,7 @@ class SettingsWindow(QDialog):
         
         # Create tab widget
         self.tabs = QTabWidget()
+        self.tabs.setMinimumHeight(630)  # Set minimum height for the tab widget
         
         # Email settings tab
         self.create_email_tab()
@@ -94,13 +95,22 @@ class SettingsWindow(QDialog):
     
     def connect_change_signals(self):
         """连接所有可能导致更改的控件信号"""
-        # Email设置
+        # Email设置 (SMTP)
         self.smtp_server.textChanged.connect(self.mark_as_changed)
         self.smtp_port.valueChanged.connect(self.mark_as_changed)
         self.smtp_security.currentIndexChanged.connect(self.mark_as_changed)
         self.sender_email.textChanged.connect(self.mark_as_changed)
         self.email_password.textChanged.connect(self.mark_as_changed)
         self.remember_password.stateChanged.connect(self.mark_as_changed)
+        self.sync_imap_checkbox.stateChanged.connect(self.mark_as_changed) # Connect new checkbox
+        self.sync_imap_checkbox.stateChanged.connect(self.sync_imap_credentials) # Connect handler
+
+        # Email设置 (IMAP)
+        self.imap_server.textChanged.connect(self.mark_as_changed)
+        self.imap_port.valueChanged.connect(self.mark_as_changed)
+        self.imap_security.currentIndexChanged.connect(self.mark_as_changed)
+        self.imap_username.textChanged.connect(self.mark_as_changed)
+        self.imap_password.textChanged.connect(self.mark_as_changed)
         
         # AI设置
         self.ai_provider.currentIndexChanged.connect(self.mark_as_changed)
@@ -124,64 +134,245 @@ class SettingsWindow(QDialog):
         self.has_unsaved_changes = True
     
     def create_email_tab(self):
-        """Create the email settings tab"""
+        """Create the email settings tab with improved layout"""
         email_tab = QWidget()
         email_layout = QVBoxLayout(email_tab)
+        email_layout.setContentsMargins(10, 10, 10, 10)
+        email_layout.setSpacing(15)
         
-        # SMTP Server Group
-        smtp_group = QGroupBox(get_text("smtp_server_settings"))
-        smtp_form = QFormLayout(smtp_group)
-        
+        # Set a larger minimum height for the tab to ensure content fits properly
+        email_tab.setMinimumHeight(600)  # Increased from default to show all content
+
         # Get email settings from config
         email_settings = self.global_settings.get("email_settings", {})
+        imap_settings = email_settings.get("imap_settings", {})
+
+        # --- Authentication Group (Primary Credentials) ---
+        auth_group = QGroupBox(get_text("authentication_settings"))
+        auth_form = QFormLayout(auth_group)
+        auth_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        auth_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        auth_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
+        auth_form.setVerticalSpacing(10)
+        auth_form.setHorizontalSpacing(15)
+
+        # Sender Email (Used as SMTP Username)
+        self.sender_email = QLineEdit(email_settings.get("sender_email", ""))
+        self.sender_email.setMinimumWidth(250)
+        auth_form.addRow(f"{get_text('sender_email')}:", self.sender_email)
+
+        # SMTP Password
+        smtp_password_encrypted = email_settings.get("email_password", "")
+        smtp_password_decrypted = decrypt_password(smtp_password_encrypted)
+        self.email_password = QLineEdit(smtp_password_decrypted)
+        self.email_password.setEchoMode(QLineEdit.EchoMode.Password)
+        auth_form.addRow(f"{get_text('password')}:", self.email_password)
+
+        # Remember Password Checkbox (Applies to SMTP password)
+        checkbox_container = QWidget()
+        checkbox_layout = QHBoxLayout(checkbox_container)
+        checkbox_layout.setContentsMargins(0, 0, 0, 0)
+        checkbox_layout.setSpacing(0)
         
-        # Create widgets for email settings
+        self.remember_password = QCheckBox(get_text("remember_password"))
+        self.remember_password.setChecked(email_settings.get("remember_password", False))
+        checkbox_layout.addWidget(self.remember_password)
+        checkbox_layout.addStretch()
+        
+        auth_form.addRow("", checkbox_container)
+
+        # Add SMTP password help text
+        # Create a container for the help label to manage width
+        help_container = QWidget()
+        help_layout = QHBoxLayout(help_container)
+        help_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Create and customize the help label
+        smtp_help_label = QLabel(get_text("smtp_password_help"))
+        smtp_help_label.setWordWrap(True)
+        smtp_help_label.setMinimumWidth(350)  # Set minimum width for better text flow
+        smtp_help_label.setStyleSheet("color: #666; font-size: 11px; padding-top: 5px;")
+        
+        # Add label to container and stretch to use maximum width
+        help_layout.addWidget(smtp_help_label)
+        help_layout.addStretch(1)
+        
+        # Add the container to the form layout
+        auth_form.addRow("", help_container)
+
+        # --- SMTP Server Group (Outgoing) ---
+        smtp_group = QGroupBox(get_text("smtp_server_settings_outgoing"))
+        smtp_form = QFormLayout(smtp_group)
+        smtp_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        smtp_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        smtp_form.setVerticalSpacing(10)
+        smtp_form.setHorizontalSpacing(15)
+
+        # Create widgets for SMTP settings
         self.smtp_server = QLineEdit(email_settings.get("smtp_server", ""))
-        
         self.smtp_port = QSpinBox()
         self.smtp_port.setRange(1, 65535)
-        self.smtp_port.setValue(email_settings.get("smtp_port", 587))
+        self.smtp_port.setValue(email_settings.get("smtp_port", 587)) # Default 587 for STARTTLS often
+        self.smtp_port.setMinimumWidth(80)
+        self.smtp_port.setMaximumWidth(100)
         
         self.smtp_security = QComboBox()
         self.smtp_security.addItems(["SSL/TLS", "STARTTLS", "None"])
+        self.smtp_security.setMinimumWidth(100)
+        self.smtp_security.setMaximumWidth(150)
         security_index = {"SSL/TLS": 0, "STARTTLS": 1, "None": 2}.get(
-            email_settings.get("smtp_security", "STARTTLS"), 1)
+            email_settings.get("smtp_security", "STARTTLS"), 1) # Default STARTTLS
         self.smtp_security.setCurrentIndex(security_index)
-        
-        smtp_form.addRow(f"{get_text('smtp_server')}:", self.smtp_server)
-        smtp_form.addRow(f"{get_text('port')}:", self.smtp_port)
-        smtp_form.addRow(f"{get_text('security')}:", self.smtp_security)
-        
-        # Authentication Group
-        auth_group = QGroupBox(get_text("authentication_settings"))
-        auth_form = QFormLayout(auth_group)
-        
-        # 如果密码已加密，解密显示
-        email_password = self.global_settings.get("email_settings", {}).get("email_password", "")
-        decrypted_password = decrypt_password(email_password)
-        
-        self.sender_email = QLineEdit(email_settings.get("sender_email", ""))
-        self.email_password = QLineEdit(decrypted_password)
-        self.email_password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.remember_password = QCheckBox(get_text("remember_password"))
-        self.remember_password.setChecked(email_settings.get("remember_password", False))
-        
-        auth_form.addRow(f"{get_text('sender_email')}:", self.sender_email)
-        auth_form.addRow(f"{get_text('password')}:", self.email_password)
-        auth_form.addRow("", self.remember_password)
-        
-        email_layout.addWidget(smtp_group)
-        email_layout.addWidget(auth_group)
 
-        # Add SMTP password help text
-        smtp_help_label = QLabel(get_text("smtp_password_help"))
-        smtp_help_label.setWordWrap(True)
-        smtp_help_label.setStyleSheet("color: #666; font-size: 11px; padding-top: 5px;")
-        email_layout.addWidget(smtp_help_label)
+        # Use horizontal layouts for port and security to control width
+        port_container = QWidget()
+        port_layout = QHBoxLayout(port_container)
+        port_layout.setContentsMargins(0, 0, 0, 0)
+        port_layout.addWidget(self.smtp_port)
+        port_layout.addStretch()
         
+        security_container = QWidget()
+        security_layout = QHBoxLayout(security_container)
+        security_layout.setContentsMargins(0, 0, 0, 0)
+        security_layout.addWidget(self.smtp_security)
+        security_layout.addStretch()
+
+        smtp_form.addRow(f"{get_text('smtp_server')}:", self.smtp_server)
+        smtp_form.addRow(f"{get_text('port')}:", port_container)
+        smtp_form.addRow(f"{get_text('security')}:", security_container)
+
+        # --- IMAP Server Group (Incoming) ---
+        imap_group = QGroupBox(get_text("imap_server_settings_incoming"))
+        imap_form = QFormLayout(imap_group)
+        imap_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        imap_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        # Increase vertical spacing slightly for better separation
+        imap_form.setVerticalSpacing(10) 
+        imap_form.setHorizontalSpacing(15)
+
+        # IMAP Server
+        self.imap_server = QLineEdit(imap_settings.get("server", ""))
+        self.imap_server.setMinimumWidth(250) # Ensure minimum width for the server field
+        imap_form.addRow(f"{get_text('imap_server')}:", self.imap_server)
+
+        # IMAP Port
+        self.imap_port = QSpinBox()
+        self.imap_port.setRange(1, 65535)
+        self.imap_port.setValue(imap_settings.get("port", 993)) # Default 993 for SSL/TLS
+        self.imap_port.setMinimumWidth(80)
+        self.imap_port.setMaximumWidth(100)
+        
+        # IMAP Security
+        self.imap_security = QComboBox()
+        self.imap_security.addItems(["SSL/TLS", "STARTTLS", "None"])
+        self.imap_security.setMinimumWidth(100)
+        self.imap_security.setMaximumWidth(150)
+        imap_security_index = {"SSL/TLS": 0, "STARTTLS": 1, "None": 2}.get(
+            imap_settings.get("security", "SSL/TLS"), 0) # Default SSL/TLS
+        self.imap_security.setCurrentIndex(imap_security_index)
+
+        # Use container widgets for controlled width
+        imap_port_container = QWidget()
+        imap_port_layout = QHBoxLayout(imap_port_container)
+        imap_port_layout.setContentsMargins(0, 0, 0, 0)
+        imap_port_layout.addWidget(self.imap_port)
+        imap_port_layout.addStretch()
+        
+        imap_security_container = QWidget()
+        imap_security_layout = QHBoxLayout(imap_security_container)
+        imap_security_layout.setContentsMargins(0, 0, 0, 0)
+        imap_security_layout.addWidget(self.imap_security)
+        imap_security_layout.addStretch()
+
+        imap_form.addRow(f"{get_text('port')}:", imap_port_container)
+        imap_form.addRow(f"{get_text('security')}:", imap_security_container)
+
+        # Checkbox to sync credentials - in its own container with proper spacing
+        sync_container = QWidget()
+        sync_layout = QHBoxLayout(sync_container)
+        # Add slightly more vertical margin around the checkbox
+        sync_layout.setContentsMargins(0, 0, 0, 0) 
+        sync_layout.setSpacing(0)
+        
+        self.sync_imap_checkbox = QCheckBox(get_text("use_smtp_credentials_for_imap"))
+        # Determine initial state: check if IMAP user/pass are empty or match SMTP
+        imap_user = imap_settings.get("username", "")
+        imap_pass_encrypted = imap_settings.get("password", "")
+        smtp_user = email_settings.get("sender_email", "")
+        # Check if IMAP user is empty OR matches SMTP user, AND IMAP pass is empty OR matches SMTP pass (decrypted)
+        initial_sync_state = (not imap_user or imap_user == smtp_user) and \
+                            (not imap_pass_encrypted or decrypt_password(imap_pass_encrypted) == smtp_password_decrypted)
+        self.sync_imap_checkbox.setChecked(initial_sync_state)
+        sync_layout.addWidget(self.sync_imap_checkbox)
+        sync_layout.addStretch()
+        
+        imap_form.addRow("", sync_container)
+
+        # IMAP Username
+        # Default to SMTP username if initially synced or IMAP username is empty
+        default_imap_user = smtp_user if initial_sync_state else imap_user
+        self.imap_username = QLineEdit(default_imap_user)
+        self.imap_username.setEnabled(not initial_sync_state)
+        imap_form.addRow(f"{get_text('username')}:", self.imap_username)
+
+        # IMAP Password
+        # Default to SMTP password if initially synced or IMAP password is empty
+        default_imap_pass = smtp_password_decrypted if initial_sync_state else decrypt_password(imap_pass_encrypted)
+        self.imap_password = QLineEdit(default_imap_pass)
+        self.imap_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.imap_password.setEnabled(not initial_sync_state)
+        imap_form.addRow(f"{get_text('password')}:", self.imap_password)
+
+        # Add IMAP help text
+        # Create a container for the help label to manage width
+        imap_help_container = QWidget()
+        imap_help_layout = QHBoxLayout(imap_help_container)
+        imap_help_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Create and customize the help label
+        imap_help_label = QLabel(get_text("imap_settings_purpose"))
+        imap_help_label.setWordWrap(True)
+        imap_help_label.setMinimumWidth(350)  # Set minimum width for better text flow
+        imap_help_label.setStyleSheet("color: #666; font-size: 11px; padding-top: 8px;")
+        
+        # Add label to container and stretch to use maximum width
+        imap_help_layout.addWidget(imap_help_label)
+        imap_help_layout.addStretch(1)
+        
+        # Add the container to the form layout
+        imap_form.addRow("", imap_help_container)
+
+        # Add groups to layout with spacing
+        email_layout.addWidget(auth_group)
+        email_layout.addWidget(smtp_group)
+        email_layout.addWidget(imap_group)
+
         email_layout.addStretch()
-        
+
         self.tabs.addTab(email_tab, get_text("email"))
+
+        # Call sync function initially to set the correct enabled state
+        self.sync_imap_credentials(self.sync_imap_checkbox.isChecked())
+        
+        # Connect server change signal to handler
+        self.smtp_server.textChanged.connect(self.on_smtp_server_changed)
+
+    def sync_imap_credentials(self, checked):
+        """Enable/disable IMAP username/password fields and copy values if checked."""
+        if checked:
+            # Copy SMTP credentials to IMAP fields
+            self.imap_username.setText(self.sender_email.text())
+            self.imap_password.setText(self.email_password.text())
+            # Disable IMAP fields
+            self.imap_username.setEnabled(False)
+            self.imap_password.setEnabled(False)
+        else:
+            # Enable IMAP fields
+            self.imap_username.setEnabled(True)
+            self.imap_password.setEnabled(True)
+            # Optionally clear fields or leave them as they were? Let's leave them.
+            # self.imap_username.clear()
+            # self.imap_password.clear()
 
     def on_smtp_server_changed(self, server):
         """Handle SMTP server text change to auto-detect OAuth requirements"""
@@ -643,19 +834,43 @@ class SettingsWindow(QDialog):
         # 首先更新通用设置
         update_success = update_general_settings(general_settings)
         
-        # Email settings
+        # Email settings (SMTP) - Collect primary credentials first
+        sender_email = self.sender_email.text()
+        smtp_password_plain = self.email_password.text()
+        remember = self.remember_password.isChecked()
+
         email_settings = {
             "smtp_server": self.smtp_server.text(),
             "smtp_port": self.smtp_port.value(),
             "smtp_security": self.smtp_security.currentText(),
-            "sender_email": self.sender_email.text(),
+            "sender_email": sender_email,
+            "remember_password": remember,
+            # Encrypt SMTP password if remember is checked
+            "email_password": encrypt_password(smtp_password_plain) if remember else ""
         }
-        
-        if self.remember_password.isChecked():
-            email_settings["email_password"] = encrypt_password(self.email_password.text())
-            email_settings["remember_password"] = True
+
+        # Email settings (IMAP)
+        imap_settings = {
+            "server": self.imap_server.text(),
+            "port": self.imap_port.value(),
+            "security": self.imap_security.currentText(),
+        }
+
+        # Handle IMAP credentials based on the sync checkbox
+        if self.sync_imap_checkbox.isChecked():
+            imap_settings["username"] = sender_email # Use SMTP username
+            # Use SMTP password (encrypted if remember is checked)
+            imap_settings["password"] = email_settings["email_password"]
         else:
-            email_settings["remember_password"] = False
+            # Use values from IMAP fields
+            imap_username_plain = self.imap_username.text()
+            imap_password_plain = self.imap_password.text()
+            imap_settings["username"] = imap_username_plain
+            # Encrypt IMAP password if remember is checked (assuming remember applies globally)
+            imap_settings["password"] = encrypt_password(imap_password_plain) if remember else ""
+
+        # Add imap_settings to email_settings
+        email_settings["imap_settings"] = imap_settings
         
         # AI settings
         ai_provider_index = self.ai_provider.currentIndex()
@@ -690,7 +905,7 @@ class SettingsWindow(QDialog):
         
         # 重要：确保在更新全局设置时不会覆盖通用设置
         self.global_settings["general_settings"] = general_settings
-        self.global_settings["email_settings"] = email_settings
+        self.global_settings["email_settings"] = email_settings # Assign the combined email settings
         self.global_settings["ai_settings"] = ai_settings
         self.global_settings["user_interests"] = user_interests
         self.global_settings["user_negative_interests"] = user_negative_interests

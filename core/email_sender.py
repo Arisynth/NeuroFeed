@@ -50,7 +50,7 @@ class EmailSender:
         # 获取当前语言设置
         self.language = get_current_language()
         # Determine the app name based on language
-        self.app_name = "智阅聚合" if self.language == "zh" else "NeuroFeed"
+        self.app_name = "NeuroFeed" if self.language == "zh" else "NeuroFeed"
     
     def send_digest(self, task_name: str, contents: List[Dict[str, Any]], 
                     recipients: List[str]) -> Dict[str, Dict[str, Any]]:
