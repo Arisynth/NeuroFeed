@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from core.encryption import decrypt_password
 from core.localization import get_text, get_current_language
 from .log_manager import LogManager
+from urllib.parse import quote  # Add import for URL encoding
 
 log_manager = LogManager()
 logger = log_manager.get_logger("email_sender")
@@ -52,7 +53,7 @@ class EmailSender:
         # Determine the app name based on language
         self.app_name = "NeuroFeed" if self.language == "zh" else "NeuroFeed"
     
-    def send_digest(self, task_name: str, contents: List[Dict[str, Any]], 
+    def send_digest(self, task_name: str, task_id: str, contents: List[Dict[str, Any]], 
                     recipients: List[str]) -> Dict[str, Dict[str, Any]]:
         """向收件人发送简报邮件"""
         if not contents:
@@ -82,8 +83,8 @@ class EmailSender:
         # Use localized text for email subject, including the app name
         subject = f"{self.app_name} - {task_name} {get_text('digest_subtitle')} ({current_date})"
         
-        # 创建HTML邮件内容
-        html_content = self._create_html_digest(sorted_contents, task_name, current_date)
+        # 创建HTML邮件内容, pass task_id
+        html_content = self._create_html_digest(sorted_contents, task_name, current_date, task_id)
         
         # 发送邮件并跟踪状态
         results = {}
@@ -297,7 +298,7 @@ class EmailSender:
             return None
     
     def _create_html_digest(self, sorted_contents: List[Dict[str, Any]], 
-                           task_name: str, date_str: str) -> str:
+                           task_name: str, date_str: str, task_id: str) -> str:
         """创建HTML格式的邮件内容"""
         # 使用内联CSS的样式
         css_styles = """
@@ -320,6 +321,8 @@ class EmailSender:
             .news-item .link { text-decoration: none; color: #3498db; font-weight: bold; }
             .news-item .link:hover { text-decoration: underline; }
             .footer { text-align: center; font-size: 12px; color: #7f8c8d; margin-top: 30px; padding: 10px; border-top: 1px solid #eee; }
+            .footer a { color: #3498db; text-decoration: none; } /* Style for unsubscribe link */
+            .footer a:hover { text-decoration: underline; } /* Hover style for unsubscribe link */
         </style>
         """
         
@@ -418,12 +421,19 @@ class EmailSender:
             </div>
             """
         
+        # Construct the unsubscribe mailto link
+        unsubscribe_subject = quote(f"Unsubscribe: {task_id}")
+        unsubscribe_link = f"mailto:{self.sender_email}?subject={unsubscribe_subject}"
+
         # 添加页脚 - Ensure the footer uses the proper date format too
         html += f"""
             </div>
             <div class="footer">
                 <p style="white-space: pre-line; color: #666; font-size: 11px; line-height: 1.4;">
                     {get_text("digest_footer")} - {date_str}
+                </p>
+                <p>
+                    <a href="{unsubscribe_link}">{get_text("unsubscribe")}</a>
                 </p>
             </div>
         </body>

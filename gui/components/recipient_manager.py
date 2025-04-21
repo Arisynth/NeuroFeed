@@ -4,7 +4,12 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 from datetime import datetime
-from core.localization import get_text
+from core.localization import get_text, get_formatted
+from core.unsubscribe_handler import UnsubscribeHandler
+import logging
+
+# Logger setup
+logger = logging.getLogger(__name__)
 
 class RecipientManager(QWidget):
     """Manages email recipients for a task"""
@@ -62,6 +67,7 @@ class RecipientManager(QWidget):
     def update_recipient_table(self):
         """Update the recipient table with the current task's recipients"""
         if not self.current_task:
+            self.recipient_table.setRowCount(0) # Clear if no task
             return
         
         self.recipient_table.setRowCount(0)  # Clear the table
@@ -162,3 +168,22 @@ class RecipientManager(QWidget):
                     get_text("email_test"),
                     get_text("test_email_failed").format(email)
                 )
+
+    def connect_signals(self, unsubscribe_handler: UnsubscribeHandler):
+         """Connects signals from the unsubscribe handler."""
+         unsubscribe_handler.unsubscribe_processed.connect(self.handle_unsubscribe)
+         logger.info("RecipientManager connected to UnsubscribeHandler signals.")
+
+    def handle_unsubscribe(self, task_id: str, unsubscribed_email: str):
+        """Slot to handle the unsubscribe signal, logs only."""
+        # This slot is now primarily for logging or potential future real-time actions.
+        # The actual UI refresh happens when the tab is selected.
+        if self.current_task and self.current_task.task_id == task_id:
+            logger.info(get_formatted("recipient_unsubscribed_log_only", unsubscribed_email, task_id))
+        else:
+             logger.debug(f"RecipientManager: Received unsubscribe signal for non-current task {task_id}. Logging only.")
+
+    def refresh_recipients(self):
+        """Refreshes the recipient list display."""
+        logger.debug(f"Refreshing recipient table for task: {self.current_task.name if self.current_task else 'None'}")
+        self.update_recipient_table()

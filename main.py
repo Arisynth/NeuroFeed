@@ -26,6 +26,7 @@ Qt = qt_modules['Qt']
 # Now safe to import the rest
 from gui.main_window import MainWindow
 from core.scheduler import start_scheduler, get_scheduler_status
+from core.unsubscribe_handler import trigger_unsubscribe_check # Import the trigger function
 
 def main():
     # Create application instance
@@ -74,6 +75,13 @@ def main():
     else:
         logger.warning("Scheduler thread may not be running properly")
     
+    # --- Temporary Test Trigger ---
+    # Call this to manually start the unsubscribe check for testing
+    # Remember to remove this line after testing
+    logger.info("TEMPORARY: Triggering manual unsubscribe check for testing...")
+    trigger_unsubscribe_check()
+    # --- End Temporary Test Trigger ---
+
     # Run the application event loop
     exit_code = app.exec()
     

@@ -15,7 +15,8 @@ from .news_db_manager import NewsDBManager
 from .log_manager import LogManager
 from core.status_manager import StatusManager
 from core.task_status import TaskStatus
-from core.localization import get_text
+from core.localization import get_text, get_formatted
+from core.unsubscribe_handler import get_unsubscribe_handler, trigger_unsubscribe_check
 
 # 替换现有的日志设置
 log_manager = LogManager()
@@ -466,8 +467,8 @@ def _execute_task(task_id=None):
                     # 创建邮件发送器
                     email_sender = EmailSender(config)
                     
-                    # 发送简报
-                    results = email_sender.send_digest(task.name, kept_contents, task.recipients)
+                    # 发送简报 - Pass task.task_id as the second argument
+                    results = email_sender.send_digest(task.name, task.task_id, kept_contents, task.recipients)
                     
                     # 更新收件人状态
                     for recipient, result in results.items():
@@ -605,7 +606,22 @@ def setup_scheduled_tasks():
                 logger.info(f"设置任务 {task.name} (ID: {task.task_id}) 在{day_name} {time_str} 执行")
                 day_method.at(time_str).do(create_job(task.task_id))
                 scheduled_count += 1
-    
+
+    # --- Add Daily Unsubscribe Check ---
+    try:
+        config = load_config()
+        imap_enabled = config.get("global_settings", {}).get("email_settings", {}).get("imap_settings", {}).get("server")
+        if imap_enabled:
+            unsubscribe_handler = get_unsubscribe_handler()
+            # Schedule to run once daily, e.g., at 3 AM
+            schedule.every().day.at("03:00").do(unsubscribe_handler.check_for_unsubscribes)
+            logger.info(get_text("unsubscribe_check_scheduled"))
+        else:
+            logger.info("IMAP server not configured, skipping daily unsubscribe check scheduling.")
+    except Exception as e:
+        logger.error(f"Failed to schedule unsubscribe check: {e}")
+    # --- End Unsubscribe Check ---
+
     logger.info(f"定时任务设置完成，共 {task_count} 个任务中的 {scheduled_count} 个调度点被设置")
     
     # 输出接下来24小时内将执行的任务
@@ -758,20 +774,17 @@ def run_task_now(task_id):
 class Scheduler:
     def __init__(self):
         self.db_manager = NewsDBManager()
-        self.setup_cleanup_task()
-    
-    def setup_cleanup_task(self):
-        """Set up daily cleanup of old articles."""
-        # Schedule cleanup to run once a day
-        # Adjust this according to your existing scheduling mechanism
-        # If using something like APScheduler:
-        # self.scheduler.add_job(self.cleanup_old_articles, 'interval', days=1)
-        pass
-    
-    def cleanup_old_articles(self):
-        """Run the database cleanup task to remove articles older than 7 days."""
-        try:
-            removed_count = self.db_manager.clean_old_articles(days=7)
-            logger.info(f"Database cleanup completed: {removed_count} old articles removed")
-        except Exception as e:
-            logger.error(f"Error during database cleanup: {e}")
+        # Remove setup_cleanup_task call if cleanup is handled elsewhere or not needed yet
+        # self.setup_cleanup_task()
+        self.unsubscribe_handler = get_unsubscribe_handler() # Get instance
+        # Connect the failure signal (example: print to log, could connect to UI later)
+        self.unsubscribe_handler.imap_check_failed.connect(self._handle_imap_failure)
+
+    def _handle_imap_failure(self, error_message: str):
+        """Logs IMAP check failures."""
+        logger.error(get_formatted("unsubscribe_check_failed_notification", error_message))
+        # Here you could also emit another signal or call a UI function to show a notification
+
+    # ... rest of Scheduler class if needed ...
+    # def setup_cleanup_task(self): ...
+    # def cleanup_old_articles(self): ...

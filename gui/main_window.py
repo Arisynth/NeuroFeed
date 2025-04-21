@@ -9,17 +9,22 @@ from gui.components.feed_manager import FeedManager
 from gui.components.recipient_manager import RecipientManager
 from gui.components.scheduler_manager import SchedulerManager
 from core.config_manager import save_task, get_general_settings, get_app_version
-from core.localization import initialize as init_localization, get_text
+from core.localization import initialize as init_localization, get_text, get_formatted
 from gui.tray_icon import TrayIcon
 from utils.resource_path import get_resource_path  # Import the resource path utility
 import platform
 from gui.components.status_bar import CustomStatusBar
 from core.status_manager import StatusManager
 from core.task_status import TaskStatus  # 添加这个导入
+from core.unsubscribe_handler import get_unsubscribe_handler  # Import handler getter
+import logging  # Add logging
 
 # Import macOS-specific utilities conditionally
 if platform.system() == 'Darwin':  # macOS
     from utils.macos_utils import hide_dock_icon, show_dock_icon
+
+# Logger setup
+logger = logging.getLogger(__name__)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -107,6 +112,17 @@ class MainWindow(QMainWindow):
         self.status_bar = CustomStatusBar()
         self.setStatusBar(self.status_bar)
         
+        # --- Connect Unsubscribe Handler and Tab Change ---
+        try:
+            unsubscribe_handler = get_unsubscribe_handler()
+            self.recipient_manager.connect_signals(unsubscribe_handler)
+            # Connect tab change signal to refresh recipient list when tab becomes active
+            self.tabs.currentChanged.connect(self.handle_tab_changed)
+            logger.info("Connected tab change signal to handle_tab_changed.")
+        except Exception as e:
+            logger.error(f"Error connecting unsubscribe handler or tab signals: {e}", exc_info=True)
+        # --- End Connection ---
+        
         # 一定要初始化任务，否则组件不会显示任务信息
         if self.task_manager.current_task:
             self.on_task_changed(self.task_manager.current_task)
@@ -120,20 +136,34 @@ class MainWindow(QMainWindow):
         )
         
         # 打印日志确认主窗口已正确初始化
-        print("主窗口初始化完成")
+        logger.info("主窗口初始化完成")
+    
+    def handle_tab_changed(self, index):
+        """Called when the current tab is changed."""
+        current_widget = self.tabs.widget(index)
+        if current_widget == self.recipient_manager:
+            logger.info("Recipients tab selected. Refreshing recipient list.")
+            self.recipient_manager.refresh_recipients()
+        # else:
+        #     logger.debug(f"Switched to tab index {index, not recipients tab.")
     
     def on_task_changed(self, task):
         """Handle task changes from task manager"""
         if not task:
-            print("警告: 收到空任务对象")
+            logger.warning("Received null task object in on_task_changed")  # Use logger
             return
             
-        print(f"任务已更改: {task.name} (ID: {task.task_id})")
+        logger.info(f"Task changed in MainWindow: {task.name} (ID: {task.task_id})")  # Use logger
         
         # Update all components with the new task
         self.feed_manager.set_task(task)
         self.scheduler_manager.set_task(task)
-        self.recipient_manager.set_task(task)
+        self.recipient_manager.set_task(task)  # This will also trigger a refresh if the tab is active
+        
+        # Explicitly refresh recipient manager if its tab is currently active
+        if self.tabs.currentWidget() == self.recipient_manager:
+            logger.debug("Refreshing recipients view because task changed while tab was active.")
+            self.recipient_manager.refresh_recipients()
     
     def run_task_now(self):
         """Execute the RSS fetching and processing task immediately"""

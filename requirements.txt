@@ -1,9 +1,13 @@
-PyQt6==6.5.3
+PyQt6>=6.4.0
 PyQt6-Qt6==6.5.3
 PyQt6-sip==13.6.0
-schedule==1.2.1
-feedparser==6.0.11
-requests==2.32.3
-beautifulsoup4>=4.9  # 添加 beautifulsoup4
-pytz>=2023.3        # 添加 pytz
+schedule>=1.1.0
+feedparser>=6.0.0
+requests>=2.28.0
+beautifulsoup4>=4.11.0
+pytz>=2022.7 # Ensure pytz is listed
 lxml>=4.9           # 添加 lxml
+openai>=1.0.0
+python-dotenv>=0.21.0
+cryptography>=38.0.0
+imapclient>=3.0.0 # Add imapclient
