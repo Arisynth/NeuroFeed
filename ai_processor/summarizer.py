@@ -395,7 +395,7 @@ Content:
             logger.info("Created ENGLISH prompt for summary generation")
         else:
             # Original Chinese prompt remains unchanged
-            prompt = f"""请为以下新闻内容提供一个{style_description}摘要。无论原文是什么语言，摘要语言必须为中文。摘要应帮助读者快速理解文章的主要内容，以便决定是否阅读原文。
+            prompt = f"""请为以下新闻内容提供一个不超过500字的{style_description}摘要。无论原文是什么语言，摘要语言必须为中文。摘要应帮助读者快速理解文章的主要内容，以便决定是否阅读原文。
 
 {"如果原标题与输出语言不匹配，请将标题翻译成中文，并以\"标题：翻译后的标题\"格式置于摘要之前。" if not title_matches_language else "文章标题已经与输出语言匹配，无需翻译。"}
 
