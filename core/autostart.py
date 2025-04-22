@@ -2,20 +2,46 @@ import os
 import sys
 import platform
 import logging
+import subprocess  # Import subprocess
+import plistlib    # Import plistlib
 from pathlib import Path
+
+# Define a unique identifier for the launchd service
+APP_NAME = "NeuroFeed"  # Or get dynamically if needed
+BUNDLE_ID = f"com.yourcompany.{APP_NAME.lower()}"  # Replace 'yourcompany' or make dynamic
 
 logger = logging.getLogger(__name__)
 
 def get_app_path():
-    """获取应用程序路径"""
+    """Get the path to the executable or the .app bundle."""
     if getattr(sys, 'frozen', False):
-        # 如果是打包后的应用
-        return sys.executable
+        # Packaged app
+        if platform.system() == 'Darwin':
+            # Path to the .app bundle
+            # sys.executable is often /path/to/YourApp.app/Contents/MacOS/YourApp
+            # Go up three levels to get the .app path
+            bundle_path = os.path.abspath(os.path.join(os.path.dirname(sys.executable), "..", "..", ".."))
+            if bundle_path.endswith(".app"):
+                logger.debug(f"Detected packaged app bundle path: {bundle_path}")
+                return bundle_path
+            else:
+                # Fallback or alternative structure? Log a warning.
+                logger.warning(f"Could not determine .app bundle path from {sys.executable}. Falling back to executable.")
+                return sys.executable  # Fallback to executable path if structure is unexpected
+        else:
+            # Windows/Linux packaged app
+            return sys.executable
     else:
-        # 如果是开发环境
-        main_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "main.py"))
-        python_path = sys.executable
-        return f'"{python_path}" "{main_path}"'
+        # Running from source
+        # Assuming main script is in the root or a known location relative to this file
+        main_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "main.py"))  # Adjust if main.py is elsewhere
+        python_executable = sys.executable
+        # Return command parts for subprocess
+        return [python_executable, main_script]
+
+def _get_plist_path():
+    """Get the path for the launchd plist file."""
+    return os.path.expanduser(f"~/Library/LaunchAgents/{BUNDLE_ID}.plist")
 
 def enable_autostart():
     """启用开机自启动"""
@@ -25,7 +51,7 @@ def enable_autostart():
         if system == "Windows":
             _enable_windows_autostart()
         elif system == "Darwin":  # macOS
-            _enable_macos_autostart()
+            _enable_autostart_macos()
         elif system == "Linux":
             _enable_linux_autostart()
         else:
@@ -46,7 +72,7 @@ def disable_autostart():
         if system == "Windows":
             _disable_windows_autostart()
         elif system == "Darwin":  # macOS
-            _disable_macos_autostart()
+            _disable_autostart_macos()
         elif system == "Linux":
             _disable_linux_autostart()
         else:
@@ -86,46 +112,76 @@ def _disable_windows_autostart():
         # 值不存在，无需删除
         pass
 
-def _enable_macos_autostart():
-    """在macOS上启用开机自启动"""
-    from string import Template
-    
-    plist_template = Template('''<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.user.neurofeed</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>$app_path</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-</dict>
-</plist>''')
-    
-    # 用户的LaunchAgents目录
-    launch_dir = os.path.expanduser("~/Library/LaunchAgents")
-    os.makedirs(launch_dir, exist_ok=True)
-    
-    plist_path = os.path.join(launch_dir, "com.user.neurofeed.plist")
-    
-    # 写入plist文件
-    with open(plist_path, 'w') as f:
-        f.write(plist_template.substitute(app_path=get_app_path()))
-    
-    # 加载启动项
-    os.system(f"launchctl load {plist_path}")
+def _enable_autostart_macos():
+    """Enable autostart on macOS using launchd and 'open -a'."""
+    app_path = get_app_path()
+    plist_path = _get_plist_path()
 
-def _disable_macos_autostart():
-    """在macOS上禁用开机自启动"""
-    plist_path = os.path.expanduser("~/Library/LaunchAgents/com.user.neurofeed.plist")
-    
-    # 卸载启动项
-    if os.path.exists(plist_path):
-        os.system(f"launchctl unload {plist_path}")
-        os.remove(plist_path)
+    # Check if running from source (list) or if it's not a .app bundle (string)
+    if not isinstance(app_path, str) or not app_path.endswith(".app"):
+        # If it's a list (running from source) or not a .app bundle string
+        if isinstance(app_path, list):
+            logger.error("Cannot enable autostart: Running from source. macOS autostart via launchd currently only supports packaged .app bundles.")
+        else: # It's a string, but not ending in .app
+            logger.error(f"Cannot enable autostart: Invalid app path for macOS bundle: {app_path}")
+        return False
+
+    plist_content = {
+        "Label": BUNDLE_ID,
+        "ProgramArguments": ["/usr/bin/open", "-a", app_path],  # Use open -a
+        "RunAtLoad": True,
+        "KeepAlive": False,  # Don't restart if it quits
+        # "StandardOutPath": os.path.expanduser(f"~/Library/Logs/{APP_NAME}.log"), # Optional logging
+        # "StandardErrorPath": os.path.expanduser(f"~/Library/Logs/{APP_NAME}.err"), # Optional logging
+    }
+
+    try:
+        os.makedirs(os.path.dirname(plist_path), exist_ok=True)
+        with open(plist_path, "wb") as fp:
+            plistlib.dump(plist_content, fp)
+        logger.info(f"Created launchd plist at {plist_path}")
+
+        # Load the service using subprocess
+        result = subprocess.run(["launchctl", "load", "-w", plist_path], capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            # Check if it's already loaded (common 'error')
+            if "already loaded" not in result.stderr.lower():
+                logger.error(f"Failed to load launchd service: {result.stderr}")
+                return False
+            else:
+                logger.info(f"Launchd service {BUNDLE_ID} already loaded.")
+        else:
+            logger.info(f"Successfully loaded launchd service {BUNDLE_ID}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error enabling autostart on macOS: {e}", exc_info=True)
+        return False
+
+def _disable_autostart_macos():
+    """Disable autostart on macOS using launchd."""
+    plist_path = _get_plist_path()
+
+    try:
+        # Unload the service first using subprocess
+        result = subprocess.run(["launchctl", "unload", "-w", plist_path], capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            # Ignore 'Could not find specified service' error if already unloaded/removed
+            if "could not find specified service" not in result.stderr.lower() and \
+               "no such file or directory" not in result.stderr.lower():
+                logger.warning(f"Could not unload launchd service (may already be unloaded): {result.stderr}")
+        else:
+            logger.info(f"Successfully unloaded launchd service {BUNDLE_ID}")
+
+        # Remove the plist file
+        if os.path.exists(plist_path):
+            os.remove(plist_path)
+            logger.info(f"Removed launchd plist at {plist_path}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error disabling autostart on macOS: {e}", exc_info=True)
+        return False
 
 def _enable_linux_autostart():
     """在Linux上启用开机自启动"""
@@ -176,8 +232,18 @@ def is_autostart_enabled():
             return False
             
     elif system == "Darwin":  # macOS
-        plist_path = os.path.expanduser("~/Library/LaunchAgents/com.user.neurofeed.plist")
-        return os.path.exists(plist_path)
+        plist_path = _get_plist_path()
+        # Check if plist exists and potentially if service is loaded
+        # A simple check for plist existence is often sufficient
+        exists = os.path.exists(plist_path)
+        logger.debug(f"Checking macOS autostart: plist exists at {plist_path}? {exists}")
+        return exists
+        # More robust check (optional):
+        # try:
+        #     result = subprocess.run(["launchctl", "list", BUNDLE_ID], capture_output=True, text=True, check=False)
+        #     return result.returncode == 0
+        # except Exception:
+        #     return False
         
     elif system == "Linux":
         desktop_path = os.path.expanduser("~/.config/autostart/neurofeed.desktop")

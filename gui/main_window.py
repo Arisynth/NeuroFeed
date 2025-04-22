@@ -290,9 +290,10 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         """重写关闭事件，实现最小化到托盘功能"""
         # 检查是否应该最小化到托盘而不是退出
+        # Reload settings here to get the current value
         general_settings = get_general_settings()
-        minimize_to_tray = general_settings.get("minimize_to_tray", True)  # 默认启用
-        
+        minimize_to_tray = general_settings.get("minimize_to_tray", True)  # Default True if missing
+
         if not self.really_quit and minimize_to_tray and self.tray_icon:
             # 显示气泡提示消息
             self.tray_icon.showMessage(
@@ -302,16 +303,19 @@ class MainWindow(QMainWindow):
                 2000  # 显示2秒
             )
             self.hide()  # 隐藏窗口
-            
+
             # On macOS, hide the dock icon when minimizing to tray
             if platform.system() == 'Darwin':
                 hide_dock_icon()
-                
+
             event.ignore()  # 忽略关闭事件
         else:
             # 真正退出
-            event.accept()
-    
+            logger.info("Close event accepted, proceeding with application exit.")
+            self.really_quit = True # Ensure flag is set for exit_application
+            self.exit_application() # Call the exit method
+            event.accept() # Accept the event if quitting
+
     def exit_application(self):
         """Properly exit the application"""
         import logging
@@ -322,17 +326,25 @@ class MainWindow(QMainWindow):
         logger = logging.getLogger(__name__)
         logger.info("Exit application requested")
         
-        # Try platform-specific exit if available
-        if platform.system() == 'Darwin':
-            try:
-                from utils.macos_utils import force_quit_application
-                if force_quit_application():
-                    return
-            except ImportError:
-                pass
-        
-        # Force application to quit using Qt
+        # Ensure tray icon is hidden/removed before quitting
+        if self.tray_icon:
+            self.tray_icon.hide()
+            # Optionally set to None, though Qt should handle cleanup
+            # self.tray_icon = None
+
+        # Try platform-specific exit if available (less common now, Qt handles most)
+        # if platform.system() == 'Darwin':
+        #     try:
+        #         from utils.macos_utils import force_quit_application
+        #         if force_quit_application():
+        #             return # Exit if platform-specific method succeeded
+        #     except ImportError:
+        #         pass # Continue with standard Qt exit
+
+        # Force application to quit using Qt's recommended method
+        logger.info("Calling QCoreApplication.instance().quit()")
         QCoreApplication.instance().quit()
-        
-        # If we get here, force exit with sys.exit
-        sys.exit(0)
+
+        # Fallback if quit() doesn't exit immediately (should not be needed often)
+        # logger.info("Forcing exit with sys.exit(0)")
+        # sys.exit(0)
