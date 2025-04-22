@@ -72,7 +72,7 @@ def initialize_config():
                         "siliconflow_model": "Qwen/Qwen2-7B-Instruct"
                     },
                     "general_settings": {
-                        "start_on_boot": True,
+                        "start_on_boot": False, # Changed default to False
                         "minimize_to_tray": True,
                         "show_notifications": True,
                         "skip_processed_articles": True,
@@ -118,7 +118,7 @@ def load_config():
                 "siliconflow_model": "Qwen/Qwen2-7B-Instruct"
             },
             "general_settings": {
-                "start_on_boot": True,
+                "start_on_boot": False, # Changed default to False
                 "minimize_to_tray": True,
                 "show_notifications": True,
                 "skip_processed_articles": False,
@@ -165,6 +165,11 @@ def load_config():
                                         loaded_config["global_settings"]["email_settings"]["imap_settings"] = sub_value
                                         # Ensure interval is removed if replaced
                                         loaded_config["global_settings"]["email_settings"]["imap_settings"].pop("check_interval_minutes", None)
+                                elif key == "general_settings" and isinstance(value, dict):
+                                    # Ensure general settings keys exist, applying the new default for start_on_boot
+                                    for sub_key, sub_value in value.items():
+                                        if sub_key not in loaded_config["global_settings"][key]:
+                                            loaded_config["global_settings"][key][sub_key] = sub_value
 
                 return loaded_config
         
@@ -278,21 +283,20 @@ def get_general_settings():
     """获取通用设置"""
     config = load_config()
     
-    # 确保路径存在并访问正确的嵌套结构
-    if "global_settings" not in config:
-        config["global_settings"] = {}
+    # Ensure nested structure exists
+    global_settings = config.setdefault("global_settings", {})
+    general_settings = global_settings.setdefault("general_settings", {})
     
-    if "general_settings" not in config["global_settings"]:
-        config["global_settings"]["general_settings"] = {}
+    # Ensure all necessary settings have default values
+    general_settings.setdefault("start_on_boot", False) # Ensure default is False
+    general_settings.setdefault("minimize_to_tray", True)
+    general_settings.setdefault("show_notifications", True)
+    general_settings.setdefault("skip_processed_articles", False) # Consistent default
+    general_settings.setdefault("language", "en") # Default language
+    general_settings.setdefault("db_retention_days", 30) # Default retention
     
-    general_settings = config["global_settings"]["general_settings"]
-    
-    # 确保所有必要的设置都有默认值
-    if "skip_processed_articles" not in general_settings:
-        general_settings["skip_processed_articles"] = False
-    
-    # 更新配置文件确保所有新增的默认值都保存了
-    save_config(config)
+    # No need to save here, load_config handles merging defaults now
+    # save_config(config) 
     
     return general_settings
 
