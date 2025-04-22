@@ -75,12 +75,10 @@ def main():
     else:
         logger.warning("Scheduler thread may not be running properly")
     
-    # --- Temporary Test Trigger ---
-    # Call this to manually start the unsubscribe check for testing
-    # Remember to remove this line after testing
-    logger.info("TEMPORARY: Triggering manual unsubscribe check for testing...")
-    trigger_unsubscribe_check()
-    # --- End Temporary Test Trigger ---
+    # --- REMOVE Temporary Test Trigger ---
+    # logger.info("TEMPORARY: Triggering manual unsubscribe check for testing...")
+    # trigger_unsubscribe_check()
+    # --- End REMOVE Temporary Test Trigger ---
 
     # Run the application event loop
     exit_code = app.exec()

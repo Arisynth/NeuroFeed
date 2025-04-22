@@ -5,7 +5,7 @@ This file is used to store and manage version information across the application
 
 # Version components
 MAJOR = 1
-MINOR = 0
+MINOR = 1
 PATCH = 0
 
 # Build version string

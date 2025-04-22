@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, 
                            QTableWidgetItem, QHeaderView, QPushButton, QLabel,
                            QMessageBox, QInputDialog)
-from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 from datetime import datetime
 from core.localization import get_text, get_formatted
@@ -168,32 +168,3 @@ class RecipientManager(QWidget):
                     get_text("email_test"),
                     get_text("test_email_failed").format(email)
                 )
-
-    def connect_signals(self, unsubscribe_handler: UnsubscribeHandler):
-         """Connects signals from the unsubscribe handler."""
-         unsubscribe_handler.unsubscribe_processed.connect(self.handle_unsubscribe)
-         logger.info("RecipientManager connected to UnsubscribeHandler signals.")
-
-    def handle_unsubscribe(self, task_id: str, unsubscribed_email: str):
-        """Slot to handle the unsubscribe signal, logs only."""
-        # This slot is now primarily for logging or potential future real-time actions.
-        # The actual UI refresh happens when the tab is selected.
-        if self.current_task and self.current_task.task_id == task_id:
-            logger.info(get_formatted("recipient_unsubscribed_log_only", unsubscribed_email, task_id))
-        else:
-             logger.debug(f"RecipientManager: Received unsubscribe signal for non-current task {task_id}. Logging only.")
-
-    def refresh_recipients(self):
-        """Refreshes the recipient list display."""
-        logger.debug(f"Refreshing recipient table for task: {self.current_task.name if self.current_task else 'None'}")
-        self.update_recipient_table()
-
-    @pyqtSlot(str, str)
-    def refresh_for_unsubscribe(self, task_id: str, email: str):
-        """Slot to refresh the recipient list if the unsubscribe affects the current task."""
-        logger.info(f"RecipientManager received unsubscribe signal for task {task_id}, email {email}")
-        if self.current_task and self.current_task.task_id == task_id:
-            logger.info(f"Unsubscribe affects current task ({task_id}). Refreshing recipient list.")
-            self.update_recipient_table()
-        else:
-            logger.info(f"Unsubscribe does not affect current task ({self.current_task.task_id if self.current_task else 'None'}). No UI refresh needed now.")

@@ -1,9 +1,13 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QComboBox, 
                             QPushButton, QLabel, QInputDialog, QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal
-from core.config_manager import get_tasks, save_task, delete_task
+from core.config_manager import get_tasks, save_task, delete_task, load_config
 from core.task_model import Task
 from core.localization import get_text, get_formatted
+import logging # Add logging import
+
+# Logger setup
+logger = logging.getLogger(__name__) # Create logger instance
 
 class TaskManager(QWidget):
     """Manages tasks selection and basic operations"""
@@ -233,3 +237,43 @@ class TaskManager(QWidget):
                 get_text("task_duplicated"),
                 get_formatted("task_duplicated_message", task_name)
             )
+
+    def reload_task(self, task_id: str):
+        """Reloads a specific task from the configuration file and updates the UI."""
+        logger.info(f"Reloading task with ID: {task_id}")
+        config = load_config()
+        task_data = next((t for t in config.get("tasks", []) if t.get("id") == task_id), None)
+
+        if task_data:
+            updated_task = Task.from_dict(task_data)
+            # Find the index of the task in the combo box and internal list
+            index_to_update = -1
+            # --- FIX: Use self.task_selector instead of self.task_combo ---
+            for i in range(self.task_selector.count()):
+                if self.task_selector.itemData(i) == task_id:
+                    index_to_update = i
+                    break
+            # --- END FIX ---
+
+            if index_to_update != -1:
+                # Update the internal list
+                self.tasks[index_to_update] = updated_task
+                # Update the combo box text (if name changed, though unlikely for unsubscribe)
+                # --- FIX: Use self.task_selector instead of self.task_combo ---
+                self.task_selector.setItemText(index_to_update, updated_task.name)
+                # --- END FIX ---
+                logger.info(f"Task '{updated_task.name}' (ID: {task_id}) reloaded.")
+
+                # If this is the currently selected task, emit the change signal
+                # --- FIX: Use self.task_selector instead of self.task_combo ---
+                if self.task_selector.currentIndex() == index_to_update:
+                # --- END FIX ---
+                    logger.info(f"Emitting task_changed signal for reloaded task: {task_id}")
+                    self.task_changed.emit(updated_task)
+                else:
+                     logger.info(f"Reloaded task {task_id} is not the currently selected task. Signal not emitted now.")
+
+            else:
+                logger.warning(f"Could not find task with ID {task_id} in the UI list after reloading.")
+        else:
+            logger.warning(f"Could not find task data for ID {task_id} in config during reload.")

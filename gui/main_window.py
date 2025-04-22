@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, 
                            QWidget, QPushButton, QTabWidget, QMessageBox,
                            QSystemTrayIcon)
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSlot
 from PyQt6.QtGui import QIcon
 from core.scheduler import run_task_now, reload_scheduled_tasks
 from gui.components.task_manager import TaskManager
@@ -112,24 +112,31 @@ class MainWindow(QMainWindow):
         self.status_bar = CustomStatusBar()
         self.setStatusBar(self.status_bar)
         
-        # --- Connect Unsubscribe Handler and Tab Change ---
+        # --- Remove previous connections ---
+        # try:
+        #     unsubscribe_handler = get_unsubscribe_handler()
+        #     # self.recipient_manager.connect_signals(unsubscribe_handler) # REMOVED
+        #     # self.tabs.currentChanged.connect(self.handle_tab_changed) # REMOVED
+        #     # logger.info("Connected tab change signal to handle_tab_changed.") # REMOVED
+        # except Exception as e:
+        #     logger.error(f"Error connecting unsubscribe handler or tab signals: {e}", exc_info=True)
+        #
+        # try:
+        #     unsubscribe_handler = get_unsubscribe_handler()
+        #     # unsubscribe_handler.unsubscribe_processed.connect(self.recipient_manager.refresh_for_unsubscribe) # REMOVED
+        #     # logger.info("Connected unsubscribe_processed signal to RecipientManager refresh slot.") # REMOVED
+        # except Exception as e:
+        #     logger.error(f"Failed to connect unsubscribe signal: {e}")
+        # --- End Removal ---
+
+        # --- Add new connection for task reload ---
         try:
             unsubscribe_handler = get_unsubscribe_handler()
-            self.recipient_manager.connect_signals(unsubscribe_handler)
-            # Connect tab change signal to refresh recipient list when tab becomes active
-            self.tabs.currentChanged.connect(self.handle_tab_changed)
-            logger.info("Connected tab change signal to handle_tab_changed.")
+            unsubscribe_handler.unsubscribe_processed.connect(self._handle_task_updated_by_unsubscribe)
+            logger.info("Connected unsubscribe_processed signal to MainWindow._handle_task_updated_by_unsubscribe slot.")
         except Exception as e:
-            logger.error(f"Error connecting unsubscribe handler or tab signals: {e}", exc_info=True)
-        # --- End Connection ---
-        
-        # Connect unsubscribe signal to recipient manager refresh slot
-        try:
-            unsubscribe_handler = get_unsubscribe_handler()
-            unsubscribe_handler.unsubscribe_processed.connect(self.recipient_manager.refresh_for_unsubscribe)
-            logger.info("Connected unsubscribe_processed signal to RecipientManager refresh slot.")
-        except Exception as e:
-            logger.error(f"Failed to connect unsubscribe signal: {e}")
+            logger.error(f"Failed to connect unsubscribe_processed signal to MainWindow slot: {e}", exc_info=True)
+        # --- End New Connection ---
 
         # 一定要初始化任务，否则组件不会显示任务信息
         if self.task_manager.current_task:
@@ -146,15 +153,12 @@ class MainWindow(QMainWindow):
         # 打印日志确认主窗口已正确初始化
         logger.info("主窗口初始化完成")
     
-    def handle_tab_changed(self, index):
-        """Called when the current tab is changed."""
-        current_widget = self.tabs.widget(index)
-        if (current_widget == self.recipient_manager):
-            logger.info("Recipients tab selected. Refreshing recipient list.")
-            self.recipient_manager.refresh_recipients()
-        # else:
-        #     logger.debug(f"Switched to tab index {index, not recipients tab.")
-    
+    @pyqtSlot(str, str)
+    def _handle_task_updated_by_unsubscribe(self, task_id: str, email: str):
+        """Slot to handle task updates triggered by the unsubscribe handler."""
+        logger.info(f"Received notification that task {task_id} was updated (unsubscribe: {email}). Triggering reload.")
+        self.task_manager.reload_task(task_id)
+
     def on_task_changed(self, task):
         """Handle task changes from task manager"""
         if not task:
