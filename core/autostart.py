@@ -17,26 +17,27 @@ def get_app_path():
     if getattr(sys, 'frozen', False):
         # Packaged app
         if platform.system() == 'Darwin':
-            # Path to the .app bundle
-            # sys.executable is often /path/to/YourApp.app/Contents/MacOS/YourApp
-            # Go up three levels to get the .app path
-            bundle_path = os.path.abspath(os.path.join(os.path.dirname(sys.executable), "..", "..", ".."))
-            if bundle_path.endswith(".app"):
-                logger.debug(f"Detected packaged app bundle path: {bundle_path}")
-                return bundle_path
+            # Find the .app bundle by walking up from the executable path
+            current_path = os.path.dirname(sys.executable)
+            while current_path != '/' and not current_path.endswith('.app'):
+                parent_path = os.path.dirname(current_path)
+                if parent_path == current_path: # Avoid infinite loop at root
+                    break
+                current_path = parent_path
+
+            if current_path.endswith('.app'):
+                logger.debug(f"Determined .app bundle path: {current_path}")
+                return current_path
             else:
-                # Fallback or alternative structure? Log a warning.
-                logger.warning(f"Could not determine .app bundle path from {sys.executable}. Falling back to executable.")
-                return sys.executable  # Fallback to executable path if structure is unexpected
+                logger.warning(f"Could not determine .app bundle path from executable {sys.executable}. Falling back to executable path.")
+                return sys.executable # Fallback
         else:
             # Windows/Linux packaged app
             return sys.executable
     else:
         # Running from source
-        # Assuming main script is in the root or a known location relative to this file
-        main_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "main.py"))  # Adjust if main.py is elsewhere
+        main_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "main.py"))
         python_executable = sys.executable
-        # Return command parts for subprocess
         return [python_executable, main_script]
 
 def _get_plist_path():
@@ -44,46 +45,62 @@ def _get_plist_path():
     return os.path.expanduser(f"~/Library/LaunchAgents/{BUNDLE_ID}.plist")
 
 def enable_autostart():
-    """启用开机自启动"""
+    """Enable autostart based on the current operating system."""
     system = platform.system()
-    
+    logger.info(f"Attempting to enable autostart for {system}")
+    success = False # Initialize success flag
     try:
         if system == "Windows":
-            _enable_windows_autostart()
-        elif system == "Darwin":  # macOS
-            _enable_autostart_macos()
+            success = _enable_windows_autostart()
+        elif system == "Darwin": # macOS
+            success = _enable_autostart_macos()
         elif system == "Linux":
-            _enable_linux_autostart()
+            success = _enable_linux_autostart()
         else:
-            logger.warning(f"不支持在 {system} 系统上设置开机自启动")
-            return False
-            
-        logger.info(f"已在 {system} 系统上设置开机自启动")
-        return True
+            logger.warning(f"Autostart not supported on this OS: {system}")
+            success = False
+
+        # Log success/failure based on the result
+        if success:
+            logger.info(f"Successfully enabled autostart on {system}")
+        else:
+            # Error should have been logged in the specific function
+            logger.warning(f"Failed to enable autostart on {system}")
+
     except Exception as e:
-        logger.error(f"设置开机自启动失败: {str(e)}")
-        return False
+        logger.error(f"Unexpected error during enable_autostart for {system}: {e}", exc_info=True)
+        success = False
+
+    return success # Return the actual success status
 
 def disable_autostart():
-    """禁用开机自启动"""
+    """Disable autostart based on the current operating system."""
     system = platform.system()
-    
+    logger.info(f"Attempting to disable autostart for {system}")
+    success = False # Initialize success flag
     try:
         if system == "Windows":
-            _disable_windows_autostart()
-        elif system == "Darwin":  # macOS
-            _disable_autostart_macos()
+            success = _disable_windows_autostart()
+        elif system == "Darwin": # macOS
+            success = _disable_autostart_macos()
         elif system == "Linux":
-            _disable_linux_autostart()
+            success = _disable_linux_autostart()
         else:
-            logger.warning(f"不支持在 {system} 系统上禁用开机自启动")
-            return False
-            
-        logger.info(f"已在 {system} 系统上禁用开机自启动")
-        return True
+            logger.warning(f"Autostart not supported on this OS: {system}")
+            success = False
+
+        # Log success/failure based on the result
+        if success:
+            logger.info(f"Successfully disabled autostart on {system}")
+        else:
+            # Error should have been logged in the specific function
+            logger.warning(f"Failed to disable autostart on {system}")
+
     except Exception as e:
-        logger.error(f"禁用开机自启动失败: {str(e)}")
-        return False
+        logger.error(f"Unexpected error during disable_autostart for {system}: {e}", exc_info=True)
+        success = False
+
+    return success # Return the actual success status
 
 def _enable_windows_autostart():
     """在Windows上启用开机自启动"""
@@ -119,20 +136,17 @@ def _enable_autostart_macos():
 
     # Check if running from source (list) or if it's not a .app bundle (string)
     if not isinstance(app_path, str) or not app_path.endswith(".app"):
-        # If it's a list (running from source) or not a .app bundle string
         if isinstance(app_path, list):
             logger.error("Cannot enable autostart: Running from source. macOS autostart via launchd currently only supports packaged .app bundles.")
         else: # It's a string, but not ending in .app
             logger.error(f"Cannot enable autostart: Invalid app path for macOS bundle: {app_path}")
-        return False
+        return False # Explicitly return False on failure
 
     plist_content = {
         "Label": BUNDLE_ID,
-        "ProgramArguments": ["/usr/bin/open", "-a", app_path],  # Use open -a
+        "ProgramArguments": ["/usr/bin/open", "-a", app_path],
         "RunAtLoad": True,
-        "KeepAlive": False,  # Don't restart if it quits
-        # "StandardOutPath": os.path.expanduser(f"~/Library/Logs/{APP_NAME}.log"), # Optional logging
-        # "StandardErrorPath": os.path.expanduser(f"~/Library/Logs/{APP_NAME}.err"), # Optional logging
+        "KeepAlive": False,
     }
 
     try:
@@ -141,22 +155,30 @@ def _enable_autostart_macos():
             plistlib.dump(plist_content, fp)
         logger.info(f"Created launchd plist at {plist_path}")
 
-        # Load the service using subprocess
         result = subprocess.run(["launchctl", "load", "-w", plist_path], capture_output=True, text=True, check=False)
         if result.returncode != 0:
-            # Check if it's already loaded (common 'error')
             if "already loaded" not in result.stderr.lower():
-                logger.error(f"Failed to load launchd service: {result.stderr}")
-                return False
+                 logger.error(f"Failed to load launchd service: {result.stderr}")
+                 # Attempt to remove potentially corrupt plist before returning False
+                 try:
+                     if os.path.exists(plist_path): os.remove(plist_path)
+                 except Exception as rm_err:
+                     logger.error(f"Failed to remove plist after load error: {rm_err}")
+                 return False # Return False on load failure
             else:
-                logger.info(f"Launchd service {BUNDLE_ID} already loaded.")
+                 logger.info(f"Launchd service {BUNDLE_ID} already loaded.")
         else:
             logger.info(f"Successfully loaded launchd service {BUNDLE_ID}")
-        return True
+        return True # Return True on success
 
     except Exception as e:
         logger.error(f"Error enabling autostart on macOS: {e}", exc_info=True)
-        return False
+        # Attempt cleanup on exception
+        try:
+            if os.path.exists(plist_path): os.remove(plist_path)
+        except Exception as rm_err:
+            logger.error(f"Failed to remove plist after exception: {rm_err}")
+        return False # Return False on exception
 
 def _disable_autostart_macos():
     """Disable autostart on macOS using launchd."""
