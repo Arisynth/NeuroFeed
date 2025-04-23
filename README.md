@@ -1,22 +1,27 @@
 # NeuroFeed
 
-NeuroFeed is an intelligent RSS feed aggregator that collects news from various sources, processes them with AI to generate summaries, and sends personalized email digests to users. SmartDigest is a feature within NeuroFeed that handles the content filtering and summarization.
+NeuroFeed is an intelligent RSS feed aggregator that collects news from various sources (including special handling for WeChat public accounts), processes them with AI to generate summaries, and sends personalized email digests to users. It also supports features like content filtering, scheduling, localization, and IMAP-based unsubscribe handling.
 
 ## Features
 
-- Collect news from multiple RSS feeds
+- Collect news from multiple RSS feeds, including WeChat public accounts
 - AI-powered article filtering, ranking, and summarization
 - Customizable email delivery scheduling
 - User-friendly GUI with system tray integration
-- Configurable preferences
-- Support for both OpenAI and local Ollama models
+- Configurable preferences (language, AI provider, data retention, etc.)
+- Support for OpenAI, local Ollama, and Silicon Flow AI models
 - Automatic startup on system boot
+- Localization support (English, Chinese)
+- Interest tags for feed prioritization and exclusion
+- IMAP integration for automatic unsubscribe request handling
+- Detailed logging and cache management
+- Database migration support
 
 ## Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/iasonyc/NeuroFeed.git
+git https://github.com/Arisynth/NeuroFeed
 cd NeuroFeed
 
 # Install dependencies
@@ -40,33 +45,63 @@ python main.py
 NeuroFeed/
 ├── main.py                 # Application entry point
 ├── gui/                    # GUI components
-│   ├── __init__.py         # Package initialization
+│   ├── __init__.py
 │   ├── main_window.py      # Main application window
 │   ├── setting_window.py   # Settings configuration window
 │   ├── tray_icon.py        # System tray integration
+│   ├── components/         # Reusable UI component groups
+│   │   ├── __init__.py
+│   │   ├── feed_manager.py
+│   │   ├── recipient_manager.py
+│   │   ├── scheduler_manager.py
+│   │   ├── status_bar.py
+│   │   └── task_manager.py
+│   │   └── tag_editor.py 
+│   ├── dialogs/            # Custom dialog boxes (if any)
+│       └── __init__.py
+|       └── feed_config_dialog.py
 ├── core/                   # Core business logic
-│   ├── __init__.py         # Package initialization
-│   ├── rss_parser.py       # RSS feed parser
-│   ├── email_sender.py     # Email delivery system
-│   ├── scheduler.py        # Task scheduling
-│   ├── config_manager.py   # Configuration management
+│   ├── __init__.py
+│   ├── config_manager.py   # Configuration loading/saving
+│   ├── email_sender.py     # Email sending logic
+│   ├── localization.py     # Language and translation management
+│   ├── log_manager.py      # Logging setup and management
+│   ├── news_db_manager.py  # Database interaction logic
+│   ├── qt_init.py          # Qt environment setup
+│   ├── rss_parser.py       # General RSS feed parsing
+│   ├── scheduler.py        # Task scheduling and execution
+│   ├── status_manager.py   # Application/task status tracking
+│   ├── task_model.py       # Data model for Tasks
+│   ├── task_status.py      # Enum for task statuses
+│   ├── unsubscribe_handler.py # IMAP unsubscribe logic
+│   ├── version.py          # Application version info
+│   └── wechat_parser.py    # WeChat public account specific parsing
 ├── ai_processor/           # AI processing modules
-│   ├── __init__.py         # Package initialization
-│   ├── filter.py           # Content filtering
-│   ├── summarizer.py       # Article summarization
-│   ├── ai_utils.py         # AI utilities (GPT/Ollama API)
-├── data/                   # Data storage
-│   ├── config.json         # User configuration
-│   ├── rss_feeds.db        # SQLite database for RSS feeds
-├── resources/              # Application resources
-│   ├── icons/              # System tray and UI icons
-│   ├── styles.qss          # Qt stylesheet for UI
-└── requirements.txt        # Project dependencies
+│   ├── __init__.py
+│   ├── filter.py           # AI content filtering
+│   ├── summarizer.py       # AI article summarization
+│   └── ai_utils.py         # AI service interaction utilities
+├── data/                   # Data storage (created automatically)
+│   ├── config.template.json # Template configuration
+│   ├── rss_news.db         # SQLite database for news cache and state
+│   └── logs/               # Log files directory
+├── resources/              # Static application resources
+│   └── icons/              # Icons for UI and tray
+├── tests/                  # Unit and integration tests
+│   ├── __init__.py
+│   ├── test_news_db_manager.py
+│   └── test_wechat_parser.py
+├── utils/                  # General utility functions
+│   └── resource_path.py    # Helper for finding resource paths
+├── build.sh                # Build script (macOS)
+├── requirements.txt        # Project dependencies
+├── LICENSES_3RD_PARTY.md   # Third-party library licenses
+└── README.md               # This file
 ```
 
 ## Configuration
 
-The application can be configured through the settings window or by directly editing the `data/config.json` file.
+The application can be configured through the settings window or by directly editing the `data/config.json` file. Log files are stored in `data/logs/`.
 
 ## Development
 
@@ -74,7 +109,19 @@ The application can be configured through the settings window or by directly edi
 
 - Python 3.8 or higher
 - PyQt6 for the GUI
-- Dependencies listed in requirements.txt
+- Key dependencies: `requests`, `beautifulsoup4`, `feedparser`, `schedule`, `pytz`, `lxml` (see `requirements.txt` for full list)
+- API Keys for desired AI services (OpenAI, Silicon Flow) if not using local Ollama.
+
+### Testing
+
+Run tests using pytest:
+```bash
+pytest tests/
+```
+You can run specific tests, e.g., WeChat parser tests:
+```bash
+python tests/test_wechat_parser.py
+```
 
 ### Contributing
 
