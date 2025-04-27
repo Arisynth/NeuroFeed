@@ -480,7 +480,7 @@ def _execute_task(task_id=None):
                             for content in kept_contents:
                                 if "article_id" in content:
                                     article_id = content["article_id"]
-                                    success = rss_parser.db_manager.mark_as_sent_to_recipient(article_id, recipient)
+                                    success = rss_parser.db_manager.mark_as_sent_to_recipient(article_id, recipient, task.task_id)
                                     if not success:
                                         logger.warning(f"标记文章为已发送给 {recipient} 失败: {content.get('title', '无标题')}")
                     

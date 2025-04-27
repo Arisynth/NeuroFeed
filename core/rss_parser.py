@@ -99,7 +99,7 @@ class RssParser:
         Args:
             feed_url: RSS Feed的URL
             items_count: 要获取的条目数量
-            task_id: 当前执行的任务ID（用于跳过被该任务丢弃的文章）
+            task_id: 当前执行的任务ID（用于跳过被该任务丢弃或已发送的文章）
             recipients: 当前任务的收件人列表（用于检查是否所有人都收到过）
         """
         try:
@@ -145,15 +145,15 @@ class RssParser:
                     skip_article = False
                     skip_reason = ""
                     
-                    if self.skip_processed:
+                    if self.skip_processed and task_id: # Ensure task_id is available for checks
                         # 检查是否对此任务丢弃过
-                        if task_id and self.db_manager.is_article_discarded_for_task(article_id, task_id):
+                        if self.db_manager.is_article_discarded_for_task(article_id, task_id):
                             skip_article = True
                             skip_reason = f"在任务 {task_id} 中被丢弃过"
-                        # 检查是否所有收件人都已收到
-                        elif recipients and self.db_manager.is_article_sent_to_all_recipients(article_id, recipients):
+                        # 检查是否已为此任务发送过 (NEW LOGIC)
+                        elif self.db_manager.is_article_sent_for_task(article_id, task_id):
                             skip_article = True
-                            skip_reason = "所有收件人已收到"
+                            skip_reason = f"在任务 {task_id} 中已发送过"
                     
                     if skip_article:
                         skipped_count += 1
@@ -254,16 +254,16 @@ class RssParser:
                 skip_article = False
                 skip_reason = ""
                 
-                if self.skip_processed:
+                if self.skip_processed and task_id: # Ensure task_id is available for checks
                     # 检查是否对此任务丢弃过
-                    if task_id and self.db_manager.is_article_discarded_for_task(article_id, task_id):
+                    if self.db_manager.is_article_discarded_for_task(article_id, task_id):
                         skip_article = True
                         skip_reason = f"在任务 {task_id} 中被丢弃过"
                     
-                    # 检查是否所有收件人都已收到
-                    elif recipients and self.db_manager.is_article_sent_to_all_recipients(article_id, recipients):
+                    # 检查是否已为此任务发送过 (NEW LOGIC)
+                    elif self.db_manager.is_article_sent_for_task(article_id, task_id):
                         skip_article = True
-                        skip_reason = "所有收件人已收到"
+                        skip_reason = f"在任务 {task_id} 中已发送过"
                 
                 if skip_article:
                     skipped_count += 1

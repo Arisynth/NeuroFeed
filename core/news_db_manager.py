@@ -56,14 +56,15 @@ class NewsDBManager:
         )
         ''')
         
-        # New table to track sent articles per recipient
+        # Updated table to track sent articles per recipient and task
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS sent_articles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             article_id TEXT,
             recipient TEXT,
+            task_id TEXT,
             sent_date TEXT,
-            UNIQUE(article_id, recipient)
+            UNIQUE(article_id, recipient, task_id)
         )
         ''')
         
@@ -388,13 +389,14 @@ class NewsDBManager:
             return False
     
     # New methods for recipient-specific article tracking
-    def mark_as_sent_to_recipient(self, article_id, recipient):
+    def mark_as_sent_to_recipient(self, article_id, recipient, task_id=None):
         """
-        Mark an article as sent to a specific recipient.
+        Mark an article as sent to a specific recipient for a specific task.
         
         Args:
             article_id (str): Unique identifier for the article
             recipient (str): Email address of the recipient
+            task_id (str, optional): ID of the task that triggered the send
             
         Returns:
             bool: True if successful, False otherwise
@@ -410,20 +412,20 @@ class NewsDBManager:
             
             # Insert or replace (in case it was already marked)
             cursor.execute('''
-            INSERT OR REPLACE INTO sent_articles (article_id, recipient, sent_date)
-            VALUES (?, ?, ?)
-            ''', (article_id, recipient, now))
+            INSERT OR REPLACE INTO sent_articles (article_id, recipient, task_id, sent_date)
+            VALUES (?, ?, ?, ?)
+            ''', (article_id, recipient, task_id, now))
             
             conn.commit()
             conn.close()
             return True
         except Exception as e:
-            print(f"Error marking article as sent to recipient: {e}")
+            print(f"Error marking article as sent to recipient for task {task_id}: {e}")
             return False
     
     def is_article_sent_to_recipient(self, article_id, recipient):
         """
-        Check if an article was sent to a specific recipient.
+        Check if an article was sent to a specific recipient (regardless of task).
         
         Args:
             article_id (str): Unique identifier for the article
@@ -450,6 +452,39 @@ class NewsDBManager:
             return result
         except Exception as e:
             print(f"Error checking if article was sent to recipient: {e}")
+            return False
+    
+    def is_article_sent_for_task(self, article_id, task_id):
+        """
+        Check if an article was sent as part of a specific task
+        (i.e., sent to at least one recipient for this task).
+        
+        Args:
+            article_id (str): Unique identifier for the article
+            task_id (str): ID of the task
+            
+        Returns:
+            bool: True if article was sent for the task, False otherwise
+        """
+        try:
+            # 规范化article_id
+            article_id = self.normalize_article_id(article_id)
+            
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+            SELECT id FROM sent_articles 
+            WHERE article_id = ? AND task_id = ?
+            LIMIT 1
+            ''', (article_id, task_id))
+            
+            result = cursor.fetchone() is not None
+            
+            conn.close()
+            return result
+        except Exception as e:
+            print(f"Error checking if article was sent for task {task_id}: {e}")
             return False
     
     def is_article_sent_to_all_recipients(self, article_id, recipients):
@@ -495,7 +530,7 @@ class NewsDBManager:
             articles = cursor.fetchall()
             for id, article_id in articles:
                 normalized_id = self.normalize_article_id(article_id)
-                if normalized_id != article_id:
+                if (normalized_id != article_id):
                     try:
                         # 检查规范化后的ID是否已存在
                         cursor.execute("SELECT id FROM news_articles WHERE article_id = ?", (normalized_id,))
@@ -525,7 +560,7 @@ class NewsDBManager:
             discarded = cursor.fetchall()
             for id, article_id in discarded:
                 normalized_id = self.normalize_article_id(article_id)
-                if normalized_id != article_id:
+                if (normalized_id != article_id):
                     try:
                         cursor.execute("UPDATE discarded_articles SET article_id = ? WHERE id = ?", (normalized_id, id))
                         stats['discarded_articles'] += 1
@@ -538,7 +573,7 @@ class NewsDBManager:
             sent = cursor.fetchall()
             for id, article_id in sent:
                 normalized_id = self.normalize_article_id(article_id)
-                if normalized_id != article_id:
+                if (normalized_id != article_id):
                     try:
                         cursor.execute("UPDATE sent_articles SET article_id = ? WHERE id = ?", (normalized_id, id))
                         stats['sent_articles'] += 1
