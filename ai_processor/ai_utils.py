@@ -123,12 +123,18 @@ class AiService:
         """
         try:
             logger.info(f"调用Ollama (模型: {self.ollama_model})")
-            
+
+            # Check if the model is a Qwen model and append /no_think if needed
+            final_prompt = prompt
+            if "qwen3" in self.ollama_model.lower():
+                final_prompt += "\n/no_think"
+                logger.info("检测到Qwen模型，已在提示词末尾添加 /no_think")
+
             response = requests.post(
                 f"{self.ollama_host}/api/generate",
                 json={
                     "model": self.ollama_model,
-                    "prompt": prompt,
+                    "prompt": final_prompt, # Use the potentially modified prompt
                     "stream": False
                 },
                 timeout=120  # 120秒超时
