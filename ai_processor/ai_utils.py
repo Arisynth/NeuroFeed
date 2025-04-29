@@ -126,9 +126,9 @@ class AiService:
 
             # Check if the model is a Qwen model and append /no_think if needed
             final_prompt = prompt
-            if "qwen3" in self.ollama_model.lower():
-                final_prompt += "\n/no_think"
-                logger.info("检测到Qwen模型，已在提示词末尾添加 /no_think")
+            # if "qwen3" in self.ollama_model.lower():
+            #     final_prompt += "\n/no_think"
+            #     logger.info("检测到Qwen模型，已在提示词末尾添加 /no_think")
 
             response = requests.post(
                 f"{self.ollama_host}/api/generate",
