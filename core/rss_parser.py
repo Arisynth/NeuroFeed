@@ -10,6 +10,8 @@ import pytz  # 添加时区支持
 from .news_db_manager import NewsDBManager
 from .config_manager import load_config
 from .wechat_parser import WeChatParser
+# Import the normalization function
+from .news_db_manager import NewsDBManager
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -28,6 +30,8 @@ class RssParser:
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": user_agent})
         self.db_manager = NewsDBManager()
+        # Get the normalization function instance
+        self.normalize_article_id = self.db_manager.normalize_article_id
         self.wechat_parser = WeChatParser()  # Initialize the WeChat parser
         
         # 从配置加载是否跳过已处理文章的设置（初始值）
@@ -136,39 +140,42 @@ class RssParser:
                 for entry in wechat_result["items"]:
                     # Generate a unique ID for this WeChat article
                     title = entry.get('title', 'No Title')
-                    link = entry.get('link', feed_url)
+                    original_link = entry.get('link', feed_url)
+                    # Normalize the link BEFORE hashing
+                    normalized_link = self.normalize_article_id(original_link)
                     
-                    # Use link + title as article_id since WeChat articles don't have consistent IDs
-                    article_id = f"wechat_{hashlib.md5((link + title).encode()).hexdigest()}"
+                    # Use normalized link + title as article_id
+                    # Ensure consistent encoding and hashing
+                    id_string = f"{normalized_link}::{title}" # Use a separator just in case
+                    article_id = f"wechat_{hashlib.md5(id_string.encode('utf-8')).hexdigest()}"
                     
-                    # Check if we should skip this article
+                    # Check if we should skip this article using the generated article_id
                     skip_article = False
                     skip_reason = ""
                     
                     if self.skip_processed and task_id: # Ensure task_id is available for checks
-                        # 检查是否对此任务丢弃过
+                        # Check using the consistently generated article_id
                         if self.db_manager.is_article_discarded_for_task(article_id, task_id):
                             skip_article = True
                             skip_reason = f"在任务 {task_id} 中被丢弃过"
-                        # 检查是否已为此任务发送过 (NEW LOGIC)
                         elif self.db_manager.is_article_sent_for_task(article_id, task_id):
                             skip_article = True
                             skip_reason = f"在任务 {task_id} 中已发送过"
                     
                     if skip_article:
                         skipped_count += 1
-                        logger.info(f"跳过微信文章: {title} - 原因: {skip_reason}")
+                        logger.info(f"跳过微信文章: {title} (ID: {article_id}) - 原因: {skip_reason}")
                         continue
                     
                     # Generate content hash
                     content = entry.get('content', '')
                     content_hash = hashlib.md5(content.encode()).hexdigest() if content else None
                     
-                    # Store in database
+                    # Store in database using the generated article_id
                     self.db_manager.add_news_article(
-                        article_id=article_id,
+                        article_id=article_id, # Use the generated ID
                         title=title,
-                        link=link,
+                        link=original_link, # Store original link for display
                         source=entry.get('source', '微信公众号'),
                         published_date=entry.get('published', datetime.now().isoformat()),
                         content_hash=content_hash
@@ -247,20 +254,30 @@ class RssParser:
                 entry = feed.entries[entry_index]
                 entry_index += 1
                 
-                # 获取唯一标识符
-                article_id = getattr(entry, 'id', entry.link)
+                # 获取原始唯一标识符 (id or link)
+                original_article_id_source = getattr(entry, 'id', None)
+                original_link = getattr(entry, 'link', None)
+
+                # Determine the base ID: prefer 'id', fallback to 'link'
+                base_id = original_article_id_source if original_article_id_source else original_link
+
+                if not base_id:
+                     title_for_log = getattr(entry, 'title', f"Entry #{entry_index}")
+                     logger.warning(f"无法为文章 '{title_for_log}' 获取 'id' 或 'link'，跳过此条目。")
+                     continue # Skip this entry if no identifier found
+
+                # Normalize the chosen identifier *before* using it for checks or storage
+                article_id = self.normalize_article_id(base_id)
                 
-                # 增强版的跳过逻辑
+                # 增强版的跳过逻辑 using the normalized article_id
                 skip_article = False
                 skip_reason = ""
                 
                 if self.skip_processed and task_id: # Ensure task_id is available for checks
-                    # 检查是否对此任务丢弃过
+                    # Check using the normalized article_id
                     if self.db_manager.is_article_discarded_for_task(article_id, task_id):
                         skip_article = True
                         skip_reason = f"在任务 {task_id} 中被丢弃过"
-                    
-                    # 检查是否已为此任务发送过 (NEW LOGIC)
                     elif self.db_manager.is_article_sent_for_task(article_id, task_id):
                         skip_article = True
                         skip_reason = f"在任务 {task_id} 中已发送过"
@@ -268,7 +285,7 @@ class RssParser:
                 if skip_article:
                     skipped_count += 1
                     title = getattr(entry, 'title', article_id)
-                    logger.info(f"跳过文章 #{entry_index}: {title} - 原因: {skip_reason}")
+                    logger.info(f"跳过文章 #{entry_index}: {title} (ID: {article_id}) - 原因: {skip_reason}")
                     continue
                 
                 # 提取发布日期，如果存在
@@ -299,12 +316,12 @@ class RssParser:
                 # 构建条目字典
                 processed_entry = {
                     "title": title,
-                    "link": link,
+                    "link": original_link, # Use original link for display/output
                     "summary": summary,
                     "published": published_date,
                     "source": feed.feed.title if hasattr(feed, 'feed') and hasattr(feed.feed, 'title') else feed_url,
                     "content": entry.content[0].value if hasattr(entry, 'content') and entry.content else summary if hasattr(entry, 'summary') else "",
-                    "article_id": article_id,  # 保存原始文章ID用于后续处理
+                    "article_id": article_id,  # Use the normalized article_id
                     "feed_url": feed_url  # 添加feed_url以便后续获取标签
                 }
                 
@@ -322,11 +339,11 @@ class RssParser:
                 elif hasattr(entry, 'summary'):
                     content_hash = hashlib.md5(entry.summary.encode()).hexdigest()
                 
-                # Store in database
+                # Store in database using the normalized article_id
                 self.db_manager.add_news_article(
-                    article_id=article_id,
+                    article_id=article_id, # Use the normalized ID
                     title=entry.title,
-                    link=entry.link,
+                    link=original_link, # Store original link
                     source=feed.feed.title if hasattr(feed, 'feed') and hasattr(feed.feed, 'title') else feed_url,
                     published_date=published_date,
                     content_hash=content_hash
