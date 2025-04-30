@@ -390,7 +390,7 @@ Title: {title}
 Content:
 {content}
 
-{"First provide the translated English title (format: 'Title: translated title'), then leave a blank line before the summary." if not title_matches_language else "Provide the English summary directly."}
+{"First provide the translated English title (format: 'Title: translated title'), then the summary in a new line." if not title_matches_language else "Provide the English summary directly."}
 """
             logger.info("Created ENGLISH prompt for summary generation")
         else:
@@ -415,7 +415,7 @@ Content:
 内容：
 {content}
 
-{'请先提供翻译后的中文标题（格式为"标题：翻译标题"），然后空一行再给出摘要。' if not title_matches_language else '请直接提供中文摘要内容。'}
+{'请先提供翻译后的中文标题（格式为"标题：翻译标题"），然后从下一行开始给出摘要。' if not title_matches_language else '请直接提供中文摘要内容。'}
 """
             logger.info("Created Chinese prompt for summary generation")
             
