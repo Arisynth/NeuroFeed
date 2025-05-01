@@ -1,6 +1,8 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QComboBox, 
-                            QPushButton, QLabel, QInputDialog, QMessageBox)
-from PyQt6.QtCore import Qt, pyqtSignal
+                            QPushButton, QLabel, QInputDialog, QMessageBox,
+                            QApplication)
+from PyQt6.QtCore import Qt, pyqtSignal, QEvent
+from PyQt6.QtGui import QPalette, QColor
 from core.config_manager import get_tasks, save_task, delete_task, load_config
 from core.task_model import Task
 from core.localization import get_text, get_formatted
@@ -20,6 +22,11 @@ class TaskManager(QWidget):
         self.current_task = None
         self.setup_ui()
         self.load_tasks()
+        
+        # Install an event filter to detect system theme changes
+        app = QApplication.instance()
+        if app:
+            app.installEventFilter(self)
     
     def setup_ui(self):
         """Setup the UI components"""
@@ -31,7 +38,7 @@ class TaskManager(QWidget):
         
         self.task_selector = QComboBox()
         self.task_selector.currentIndexChanged.connect(self.on_task_changed)
-        # 确保下拉列表的字体大小一致
+        # 确保下拉列表的字体大小一致 - 保持原有样式
         self.task_selector.setStyleSheet("""
             QComboBox {
                 font-size: 12px;
@@ -277,3 +284,32 @@ class TaskManager(QWidget):
                 logger.warning(f"Could not find task with ID {task_id} in the UI list after reloading.")
         else:
             logger.warning(f"Could not find task data for ID {task_id} in config during reload.")
+    
+    def eventFilter(self, obj, event):
+        """Event filter to catch palette change events"""
+        if event.type() == QEvent.Type.PaletteChange:
+            # System theme has changed, need to refresh the QComboBox
+            print("Detected theme change, refreshing QComboBox")
+            self.refresh_combo_display()
+            return False  # Continue event propagation
+        return super().eventFilter(obj, event)
+    
+    def refresh_combo_display(self):
+        """Force a refresh of the QComboBox to update its colors based on current theme"""
+        # This trick forces the QComboBox to refresh its appearance
+        # 1. Store current text/index
+        current_index = self.task_selector.currentIndex()
+        current_text = self.task_selector.currentText()
+        
+        # 2. Briefly disable and re-enable to force a repaint
+        self.task_selector.setEnabled(False)
+        self.task_selector.setEnabled(True)
+        
+        # 3. Force style update by setting the same style again
+        style = self.task_selector.styleSheet()
+        self.task_selector.setStyleSheet("")
+        self.task_selector.setStyleSheet(style)
+        
+        # 4. Ensure selection remains the same
+        if current_index >= 0:
+            self.task_selector.setCurrentIndex(current_index)
