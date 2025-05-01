@@ -372,14 +372,14 @@ class NewsSummarizer:
 Regardless of the original language of the article, your summary **MUST be in English**.
 The summary should help readers quickly understand the main content of the article.
 
-{"If the original title is not in English, please translate it into English and include it as 'Title: [translated title]'" if not title_matches_language else "The title is already in English, no need to translate it."}
+{"If the original title is not in English, please translate it into English and include it at the beginning using the format 'Title: [actual translated title]'" if not title_matches_language else "The title is already in English, no need to translate it."}
 
 Please follow these requirements:
 1. Output MUST be in English only, never in Chinese or any other language
 2. Include the core information and main points of the article
 3. Use clear and concise language
 4. **All content must be based on the original text**
-5. Do not use phrases like "News Summary" or "In summary" as opening words
+5. Do not use introductory phrases like "News Summary", "Summary:", "In summary", etc. before the summary text.
 6. Do not include closing phrases like "End of summary"
 7. Do not include metadata such as date or source
 8. Avoid hallucination, make sure that the output is reliable and accurate
@@ -390,20 +390,20 @@ Title: {title}
 Content:
 {content}
 
-{"First provide the translated English title (format: 'Title: translated title'), then the summary in a new line." if not title_matches_language else "Provide the English summary directly."}
+{"First provide the translated English title using the format 'Title: [actual translated title here]', then start the summary **directly** on a new line without any prefix like 'Summary:'." if not title_matches_language else "Provide the English summary **directly** without any prefix."}
 """
             logger.info("Created ENGLISH prompt for summary generation")
         else:
-            # Original Chinese prompt remains unchanged
+            # Original Chinese prompt remains unchanged - Modify format instruction
             prompt = f"""请为以下新闻内容提供一个不超过500字的{style_description}摘要。无论原文是什么语言，摘要语言必须为中文。摘要应帮助读者快速理解文章的主要内容，以便决定是否阅读原文。
 
-{"如果原标题与输出语言不匹配，请将标题翻译成中文，并以\"标题：翻译后的标题\"格式置于摘要之前。" if not title_matches_language else "文章标题已经与输出语言匹配，无需翻译。"}
+{"如果原标题与输出语言不匹配，请将标题翻译成中文，并以“标题：[实际翻译后的标题]”的格式置于摘要之前。" if not title_matches_language else "文章标题已经与输出语言匹配，无需翻译。"}
 
 请遵循以下要求：
 1. 摘要应包含文章的核心信息和要点，保持完整性和可读性
 2. 语言简洁清晰，不要过于冗长
 3. **所有内容必须基于原文，严禁添加未在原文中提及的信息**
-4. 不要使用"新闻简报"、"摘要"、"总结"等词作为开头
+4. 不要使用“新闻简报”、“摘要：”、“总结：”等任何形式的词语作为摘要内容的开头。
 5. 不要包含"简报结束"、"以上就是..."等作为结尾
 6. 不要包含当前日期、来源信息、参考链接等元数据
 7. 直接输出中文摘要内容，不要添加额外的解释或说明
@@ -415,7 +415,7 @@ Content:
 内容：
 {content}
 
-{'请先提供翻译后的中文标题（格式为"标题：翻译标题"），然后从下一行开始给出摘要。' if not title_matches_language else '请直接提供中文摘要内容。'}
+{'请先提供翻译后的中文标题，使用格式“标题：[实际翻译后的标题]”，然后从下一行开始 **直接输出摘要正文**，不要加“摘要：”等任何前缀。' if not title_matches_language else '请 **直接提供中文摘要内容**，不要加任何前缀。'}
 """
             logger.info("Created Chinese prompt for summary generation")
             
