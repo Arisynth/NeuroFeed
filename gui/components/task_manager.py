@@ -289,7 +289,6 @@ class TaskManager(QWidget):
         """Event filter to catch palette change events"""
         if event.type() == QEvent.Type.PaletteChange:
             # System theme has changed, need to refresh the QComboBox
-            print("Detected theme change, refreshing QComboBox")
             self.refresh_combo_display()
             return False  # Continue event propagation
         return super().eventFilter(obj, event)
@@ -299,7 +298,6 @@ class TaskManager(QWidget):
         # This trick forces the QComboBox to refresh its appearance
         # 1. Store current text/index
         current_index = self.task_selector.currentIndex()
-        current_text = self.task_selector.currentText()
         
         # 2. Briefly disable and re-enable to force a repaint
         self.task_selector.setEnabled(False)

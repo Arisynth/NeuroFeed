@@ -5,7 +5,7 @@ import time
 import logging
 from typing import List, Dict, Any, Optional
 import hashlib
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup # Import BeautifulSoup
 import pytz  # 添加时区支持
 from .news_db_manager import NewsDBManager
 from .config_manager import load_config
@@ -96,6 +96,30 @@ class RssParser:
         logger.debug(f"时间 {dt} 无时区信息，假定为UTC时间并转换为本地时间")
         utc_dt = dt.replace(tzinfo=pytz.UTC)
         return utc_dt.astimezone(datetime.now().astimezone().tzinfo)
+
+    def _clean_html(self, html_content: str) -> str:
+        """
+        Removes HTML tags from a string.
+
+        Args:
+            html_content: The HTML string.
+
+        Returns:
+            Plain text string.
+        """
+        if not html_content:
+            return ""
+        try:
+            soup = BeautifulSoup(html_content, "html.parser")
+            # Get text, separating paragraphs/blocks with double newlines
+            text = soup.get_text(separator='\n\n', strip=True)
+            # Further clean up excessive newlines that might result
+            cleaned_text = '\n\n'.join(line for line in text.splitlines() if line.strip())
+            return cleaned_text
+        except Exception as e:
+            logger.warning(f"Error cleaning HTML: {e}. Returning original content.")
+            # Return original content if cleaning fails
+            return html_content
     
     def fetch_feed(self, feed_url: str, items_count: int = 10, task_id: str = None, recipients: List[str] = None) -> Dict[str, Any]:
         """获取RSS Feed内容
@@ -310,34 +334,41 @@ class RssParser:
                 link = entry.link if hasattr(entry, 'link') else ""
                 logger.info(f"处理条目 #{len(processed_entries)+1} (总索引 #{entry_index}): {title}")
                 
-                # 获取摘要
-                summary = entry.summary if hasattr(entry, 'summary') else ""
+                # 获取摘要 (原始HTML)
+                raw_summary = entry.summary if hasattr(entry, 'summary') else ""
+                # 清理摘要HTML
+                cleaned_summary = self._clean_html(raw_summary)
                 
-                # 构建条目字典
+                # 获取内容 (原始HTML)
+                raw_content = entry.content[0].value if hasattr(entry, 'content') and entry.content else raw_summary
+                # 清理内容HTML
+                cleaned_content = self._clean_html(raw_content)
+                
+                # 构建条目字典，使用清理后的文本
                 processed_entry = {
                     "title": title,
                     "link": original_link, # Use original link for display/output
-                    "summary": summary,
+                    "summary": cleaned_summary, # Use cleaned summary
                     "published": published_date,
                     "source": feed.feed.title if hasattr(feed, 'feed') and hasattr(feed.feed, 'title') else feed_url,
-                    "content": entry.content[0].value if hasattr(entry, 'content') and entry.content else summary if hasattr(entry, 'summary') else "",
+                    "content": cleaned_content, # Use cleaned content
                     "article_id": article_id,  # Use the normalized article_id
                     "feed_url": feed_url  # 添加feed_url以便后续获取标签
                 }
                 
-                # 记录内容长度
+                # 记录清理后内容长度
                 content_len = len(processed_entry["content"])
-                logger.info(f"条目内容长度: {content_len} 字符")
+                summary_len = len(processed_entry["summary"])
+                logger.info(f"条目清理后摘要长度: {summary_len} 字符")
+                logger.info(f"条目清理后内容长度: {content_len} 字符")
                 
                 processed_entries.append(processed_entry)
                 
-                # Generate content hash if content exists
+                # Generate content hash using the *cleaned* content if available, else cleaned summary
                 content_hash = None
-                if hasattr(entry, 'content'):
-                    content = entry.content[0].value if isinstance(entry.content, list) else entry.content
-                    content_hash = hashlib.md5(content.encode()).hexdigest()
-                elif hasattr(entry, 'summary'):
-                    content_hash = hashlib.md5(entry.summary.encode()).hexdigest()
+                content_to_hash = cleaned_content if cleaned_content else cleaned_summary
+                if content_to_hash:
+                    content_hash = hashlib.md5(content_to_hash.encode('utf-8')).hexdigest()
                 
                 # Store in database using the normalized article_id
                 self.db_manager.add_news_article(
@@ -346,7 +377,7 @@ class RssParser:
                     link=original_link, # Store original link
                     source=feed.feed.title if hasattr(feed, 'feed') and hasattr(feed.feed, 'title') else feed_url,
                     published_date=published_date,
-                    content_hash=content_hash
+                    content_hash=content_hash # Use hash of cleaned content
                 )
             
             # 如果启用了跳过文章功能，记录详细的统计信息
