@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, 
                            QWidget, QPushButton, QTabWidget, QMessageBox,
                            QSystemTrayIcon)
-from PyQt6.QtCore import Qt, pyqtSlot
+from PyQt6.QtCore import Qt, pyqtSlot, QTimer # Import QTimer
 from PyQt6.QtGui import QIcon
 from core.scheduler import run_task_now, reload_scheduled_tasks
 from gui.components.task_manager import TaskManager
@@ -157,26 +157,39 @@ class MainWindow(QMainWindow):
     def _handle_task_updated_by_unsubscribe(self, task_id: str, email: str):
         """Slot to handle task updates triggered by the unsubscribe handler."""
         logger.info(f"Received notification that task {task_id} was updated (unsubscribe: {email}). Triggering reload.")
-        self.task_manager.reload_task(task_id)
+        # Defer the reload slightly to avoid potential conflicts
+        QTimer.singleShot(0, lambda: self.task_manager.reload_task(task_id))
 
     def on_task_changed(self, task):
-        """Handle task changes from task manager"""
+        """Handle task changes from task manager, deferring UI updates slightly."""
         if not task:
-            logger.warning("Received null task object in on_task_changed")  # Use logger
+            logger.warning("Received null task object in on_task_changed")
             return
-            
-        logger.info(f"Task changed in MainWindow: {task.name} (ID: {task.task_id})")  # Use logger
-        
-        # Update all components with the new task
-        self.feed_manager.set_task(task)
-        self.scheduler_manager.set_task(task)
-        self.recipient_manager.set_task(task)  # This will also trigger a refresh if the tab is active
-        
-        # Explicitly refresh recipient manager if its tab is currently active
-        if self.tabs.currentWidget() == self.recipient_manager:
-            logger.debug("Refreshing recipients view because task changed while tab was active.")
-            self.recipient_manager.refresh_recipients()
-    
+
+        logger.info(f"Task changed signal received for: {task.name} (ID: {task.task_id}). Scheduling UI update.")
+        # Use QTimer.singleShot to defer the update slightly.
+        # This allows the QComboBox event handling to complete before updating other widgets.
+        QTimer.singleShot(0, lambda t=task: self._update_components_for_task(t))
+
+    def _update_components_for_task(self, task):
+        """Updates UI components with the new task data."""
+        if not task:
+            logger.warning("Attempted to update components with null task in _update_components_for_task")
+            return
+
+        logger.info(f"Updating components for task: {task.name} (ID: {task.task_id})")
+        try:
+            # Update all components with the new task
+            self.feed_manager.set_task(task)
+            self.scheduler_manager.set_task(task)
+            self.recipient_manager.set_task(task) # This calls update_recipient_table
+
+            # No need for explicit refresh here, set_task handles it.
+            # if self.tabs.currentWidget() == self.recipient_manager:
+            #     logger.debug("Recipient tab is active, set_task already updated it.")
+        except Exception as e:
+            logger.error(f"Error updating components for task {task.name}: {e}", exc_info=True)
+
     def run_task_now(self):
         """Execute the RSS fetching and processing task immediately"""
         task = self.task_manager.get_current_task()
