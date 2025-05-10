@@ -6,6 +6,7 @@ import pytz  # 添加时区支持
 from bs4 import BeautifulSoup
 from typing import Dict, Any, List
 from .config_manager import load_config  # 添加导入
+import re # Add re import for whitespace normalization
 
 logger = logging.getLogger("wechat_parser")
 
@@ -430,15 +431,32 @@ class WeChatParser:
         return self._get_clean_text_content(soup)
 
     def _get_clean_text_content(self, element):
-        """Extract clean text content from an HTML element"""
-        # Remove <em> tags by replacing them with their content
-        if element:
-            for em_tag in element.find_all('em'):
-                em_tag.unwrap()
-                
-        # Get all text without HTML tags
-        text = element.get_text(separator='\n', strip=True)
+        """Extract clean text content from an HTML element, normalizing whitespace."""
+        if not element:
+            return ""
+            
+        # First get the HTML string and apply direct regex to handle <em> tags properly
+        html_str = str(element)
+        # Remove <em> tags without introducing spaces where the tags were
+        html_str = re.sub(r'<em>([^<]*)</em>', r'\1', html_str)
         
-        # Clean up the text - remove excessive whitespace
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-        return '\n\n'.join(lines)
+        # Re-parse the modified HTML
+        element = BeautifulSoup(html_str, 'html.parser')
+        
+        # Remove any remaining <em> tags by replacing them with their content
+        for em_tag in element.find_all('em'):
+            em_tag.unwrap()
+                
+        # Get all text without HTML tags, using single newline as a basic separator
+        raw_text = element.get_text(separator='\n', strip=True)
+        
+        processed_lines = []
+        for line in raw_text.splitlines():
+            stripped_line = line.strip() # Strip leading/trailing whitespace from the line
+            if stripped_line: # Only process non-empty lines
+                # Normalize all whitespace characters to single spaces
+                normalized_line = re.sub(r'\s+', ' ', stripped_line)
+                processed_lines.append(normalized_line)
+        
+        # Join processed lines with double newlines to represent paragraphs
+        return '\n\n'.join(processed_lines)

@@ -12,6 +12,7 @@ from .config_manager import load_config
 from .wechat_parser import WeChatParser
 # Import the normalization function
 from .news_db_manager import NewsDBManager
+import re # Add re import for whitespace normalization
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -99,7 +100,7 @@ class RssParser:
 
     def _clean_html(self, html_content: str) -> str:
         """
-        Removes HTML tags from a string.
+        Removes HTML tags from a string and normalizes whitespace.
 
         Args:
             html_content: The HTML string.
@@ -110,16 +111,29 @@ class RssParser:
         if not html_content:
             return ""
         try:
+            # First, normalize any <em> tags by removing them but preserving their content without adding spaces
+            # This needs to happen before BeautifulSoup parsing to avoid extra whitespace
+            html_content = re.sub(r'<em>([^<]*)</em>', r'\1', html_content)
+            
             soup = BeautifulSoup(html_content, "html.parser")
             
-            # Remove <em> tags by replacing them with their content
+            # Still unwrap any remaining <em> tags (in case regex didn't catch them all)
             for em_tag in soup.find_all('em'):
                 em_tag.unwrap()
                 
-            # Get text, separating paragraphs/blocks with double newlines
-            text = soup.get_text(separator='\n\n', strip=True)
-            # Further clean up excessive newlines that might result
-            cleaned_text = '\n\n'.join(line for line in text.splitlines() if line.strip())
+            # Get text, using single newline as a basic separator
+            raw_text = soup.get_text(separator='\n', strip=True)
+            
+            processed_lines = []
+            for line in raw_text.splitlines():
+                stripped_line = line.strip() # Strip leading/trailing whitespace from the line
+                if stripped_line: # Only process non-empty lines
+                    # First normalize multiple spaces within the line to a single space
+                    normalized_line = re.sub(r'\s+', ' ', stripped_line)
+                    processed_lines.append(normalized_line)
+            
+            # Join processed lines with double newlines to represent paragraphs
+            cleaned_text = '\n\n'.join(processed_lines)
             return cleaned_text
         except Exception as e:
             logger.warning(f"Error cleaning HTML: {e}. Returning original content.")
