@@ -431,6 +431,11 @@ class WeChatParser:
 
     def _get_clean_text_content(self, element):
         """Extract clean text content from an HTML element"""
+        # Remove <em> tags by replacing them with their content
+        if element:
+            for em_tag in element.find_all('em'):
+                em_tag.unwrap()
+                
         # Get all text without HTML tags
         text = element.get_text(separator='\n', strip=True)
         

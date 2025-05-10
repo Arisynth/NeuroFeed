@@ -111,6 +111,11 @@ class RssParser:
             return ""
         try:
             soup = BeautifulSoup(html_content, "html.parser")
+            
+            # Remove <em> tags by replacing them with their content
+            for em_tag in soup.find_all('em'):
+                em_tag.unwrap()
+                
             # Get text, separating paragraphs/blocks with double newlines
             text = soup.get_text(separator='\n\n', strip=True)
             # Further clean up excessive newlines that might result

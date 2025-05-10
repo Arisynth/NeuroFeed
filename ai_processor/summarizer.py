@@ -236,8 +236,28 @@ class NewsSummarizer:
         Returns:
             清除思考过程后的文本
         """
+        # Log a preview of the original text
+        original_text_preview = text[:200] + "..." if len(text) > 200 else text
+        logger.debug(f"Original AI response (preview for cleaning): {original_text_preview}")
+
         # 使用非贪婪匹配移除所有<think>...</think>标记之间的内容
+        # Explanation for occasional incomplete cleaning (e.g., "text</think>" remnants):
+        # 1. The regex r'<think>.*?</think>' targets complete blocks starting with <think> and ending with </think>.
+        # 2. re.sub() removes all non-overlapping instances of this pattern.
+        # 3. If the AI generates malformed output, such as "...<think>ThoughtA</think> remnant_text</think>...",
+        #    the primary block "<think>ThoughtA</think>" is removed.
+        # 4. The remaining " remnant_text</think>" does not start with "<think>" and therefore
+        #    does not match the regex pattern, so it's left untouched by this function.
+        #    This accounts for rare cases where a few characters and a closing </think> tag might persist.
         cleaned_text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+        
+        # Log a preview of the cleaned text if changes were made
+        if cleaned_text != text:
+            cleaned_text_preview = cleaned_text[:200] + "..." if len(cleaned_text) > 200 else cleaned_text
+            logger.debug(f"Cleaned AI response (preview): {cleaned_text_preview}")
+        else:
+            logger.debug("No <think> tags found or cleaned in AI response.")
+            
         return cleaned_text
     
     def _generate_ai_summary(self, content: Dict[str, Any]) -> str:
